@@ -365,13 +365,13 @@ async function loadJobs() {
       dom.jobCountText.textContent = `Showing ${jobs.length} Bookmarked Opportunities`;
     } else {
       const scopeLabel = state.locationScope === 'target' 
-        ? ' [🎯 Target: India (Office/WFH) + Global Online Internships]' 
+        ? ' [🎯 Target: India Cyber (Office/WFH) + Global Online Cyber Internships]' 
         : state.locationScope === 'india' 
-        ? ' [🇮🇳 India Only]' 
+        ? ' [🇮🇳 India Cyber Roles]' 
         : state.locationScope === 'global_remote_intern' 
-        ? ' [💻 Global Remote Interns Only]' 
-        : '';
-      dom.jobCountText.textContent = `Showing ${(data.total === 0 ? 0 : (data.page - 1) * data.page_size + 1)}–${Math.min(data.page * data.page_size, data.total)} of ${data.total.toLocaleString()} positions${scopeLabel}`;
+        ? ' [💻 Global Online Cyber Internships]' 
+        : ' [🌐 All Global Cyber Roles]';
+      dom.jobCountText.textContent = `Showing ${(data.total === 0 ? 0 : (data.page - 1) * data.page_size + 1)}–${Math.min(data.page * data.page_size, data.total)} of ${data.total.toLocaleString()} cybersecurity positions${scopeLabel}`;
     }
 
     renderJobCards(jobs);

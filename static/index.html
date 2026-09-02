@@ -48,28 +48,26 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
         </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-sm font-extrabold tracking-wider font-mono text-white">CYBERSEC // INTEL GRID</h1>
-            <span class="text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.2 rounded uppercase">v1.0-LIVE</span>
-          </div>
-          <div class="flex items-center gap-2 mt-0.5">
-            <span id="system-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 pulse-emerald"></span>
-            <span id="system-status-text" class="text-[11px] font-mono text-slate-400">System Nominal</span>
-            <span class="text-slate-600 text-[10px]">•</span>
-            <span class="text-[11px] font-mono text-slate-400">Last Synced: <span id="stat-last-sync" class="text-slate-300">Just now</span></span>
-          </div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-sm font-extrabold tracking-wider font-mono text-white">CYBERSECURITY // INTEL GRID</h1>
+          <span class="text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.2 rounded uppercase">100% CYBER ONLY</span>
+        </div>
+        <div class="flex items-center gap-2 mt-0.5">
+          <span id="system-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 pulse-emerald"></span>
+          <span id="system-status-text" class="text-[11px] font-mono text-slate-400">System Nominal</span>
+          <span class="text-slate-600 text-[10px]">•</span>
+          <span class="text-[11px] font-mono text-slate-400">Last Synced: <span id="stat-last-sync" class="text-slate-300">Just now</span></span>
         </div>
       </div>
 
-      <!-- Action Console -->
+      <!-- Quick Action HUD -->
       <div class="flex items-center flex-wrap gap-2.5">
-        <!-- Telemetry Toggle -->
+        <!-- Analytics Toggle -->
         <button id="analytics-toggle" class="btn-cyber px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-mono text-slate-300 hover:text-white hover:border-slate-500 flex items-center gap-1.5 transition-all">
           <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
           </svg>
-          <span>Telemetry Charts</span>
+          <span>Analytics</span>
         </button>
 
         <!-- Saved Bookmarks View -->
@@ -108,40 +106,38 @@
       <!-- Metric Cards Grid -->
       <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <div class="hud-card p-3.5 rounded-xl border border-slate-800">
-          <span class="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Total Tracked Roles</span>
+          <span class="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Total Cyber Roles</span>
           <div class="text-2xl font-extrabold text-white mt-1 font-mono" id="stat-total-jobs">0</div>
-          <span class="text-[10px] text-slate-500 mt-0.5 block">Live indexed & deduplicated</span>
+          <span class="text-[10px] text-slate-500 mt-0.5 block">Strict Cybersecurity Only</span>
         </div>
 
-        <div class="hud-card p-3.5 rounded-xl border border-cyan-500/40 bg-cyan-950/20">
-          <span class="text-[10px] font-mono text-cyan-400 uppercase tracking-wider block flex items-center gap-1">
-            <span>🎯</span> Target Matches
-          </span>
-          <div class="text-2xl font-extrabold text-cyan-300 mt-1 font-mono" id="stat-target-matches">0</div>
-          <span class="text-[10px] text-cyan-400/80 mt-0.5 block truncate">India (Office/WFH) + Global Remote</span>
+        <div class="hud-card p-3.5 rounded-xl border border-cyan-500/40 bg-cyan-950/10">
+          <span class="text-[10px] font-mono text-cyan-300 uppercase tracking-wider block">🎯 Target Matches</span>
+          <div class="text-2xl font-extrabold text-cyan-400 mt-1 font-mono" id="stat-target-matches">0</div>
+          <span class="text-[10px] text-cyan-500/80 mt-0.5 block">India + Global Remote Interns</span>
         </div>
 
-        <div class="hud-card p-3.5 rounded-xl border border-slate-800">
-          <span class="text-[10px] font-mono text-emerald-400 uppercase tracking-wider block">🇮🇳 India Roles</span>
-          <div class="text-2xl font-extrabold text-emerald-300 mt-1 font-mono" id="stat-india-jobs">0</div>
-          <span class="text-[10px] text-slate-500 mt-0.5 block">Office / Work From Home</span>
+        <div class="hud-card p-3.5 rounded-xl border border-emerald-500/40 bg-emerald-950/10">
+          <span class="text-[10px] font-mono text-emerald-300 uppercase tracking-wider block">🇮🇳 India Cyber Roles</span>
+          <div class="text-2xl font-extrabold text-emerald-400 mt-1 font-mono" id="stat-india-jobs">0</div>
+          <span class="text-[10px] text-emerald-500/80 mt-0.5 block">Office or Work From Home</span>
         </div>
 
-        <div class="hud-card p-3.5 rounded-xl border border-slate-800">
-          <span class="text-[10px] font-mono text-purple-400 uppercase tracking-wider block">💻 Global Online Interns</span>
-          <div class="text-2xl font-extrabold text-purple-300 mt-1 font-mono" id="stat-global-remote-interns">0</div>
-          <span class="text-[10px] text-slate-500 mt-0.5 block">International Remote</span>
+        <div class="hud-card p-3.5 rounded-xl border border-purple-500/40 bg-purple-950/10">
+          <span class="text-[10px] font-mono text-purple-300 uppercase tracking-wider block">💻 Global Online Interns</span>
+          <div class="text-2xl font-extrabold text-purple-400 mt-1 font-mono" id="stat-global-remote-interns">0</div>
+          <span class="text-[10px] text-purple-500/80 mt-0.5 block">Strict Online Internships</span>
         </div>
 
-        <div class="hud-card p-3.5 rounded-xl border border-slate-800 col-span-2 sm:col-span-1">
-          <span class="text-[10px] font-mono text-amber-400 uppercase tracking-wider block">🎓 Total Internships</span>
-          <div class="text-2xl font-extrabold text-amber-300 mt-1 font-mono" id="stat-internships">0</div>
-          <span class="text-[10px] text-slate-500 mt-0.5 block">Global entry-level pool</span>
+        <div class="hud-card p-3.5 rounded-xl border border-amber-500/30 bg-amber-950/10">
+          <span class="text-[10px] font-mono text-amber-400 uppercase tracking-wider block">Cyber Internships</span>
+          <div class="text-2xl font-extrabold text-amber-400 mt-1 font-mono" id="stat-internships">0</div>
+          <span class="text-[10px] text-amber-500/70 mt-0.5 block">Security entry-level/intern</span>
         </div>
       </div>
 
-      <!-- Charts Row -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Analytics Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="hud-card p-5 rounded-xl border border-slate-800 flex flex-col items-center">
           <h3 class="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider self-start mb-2">Role Type Distribution</h3>
           <div class="w-full h-48 relative">
@@ -176,7 +172,7 @@
         <input 
           type="text" 
           id="search-input"
-          placeholder="Search by role, company, certification (e.g. Pentest, CrowdStrike, CISSP, AWS, Intern)..."
+          placeholder="Search cybersecurity roles (e.g. SOC Analyst, Pentester, AppSec, GRC, Zscaler, Intern)..."
           class="w-full pl-10 pr-24 py-3 bg-slate-900/90 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-sans transition-all"
         />
         <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center gap-2">
@@ -195,15 +191,16 @@
       <div class="flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs font-mono">
         <div class="flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-          <span class="text-slate-400 uppercase tracking-wider text-[11px] font-bold">Target Geographic Scope:</span>
+          <span class="text-slate-400 uppercase tracking-wider text-[11px] font-bold">Target Scope:</span>
+          <span class="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">100% CyberSec Verified</span>
         </div>
         <div id="location-scope-tabs" class="flex flex-wrap items-center gap-1.5">
           <button onclick="setLocationScope('target')" data-scope="target" class="px-3 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/60 font-bold flex items-center gap-1.5 transition-all shadow-sm">
-            <span>🎯</span> Target Filter (India Office/WFH + Global Remote Interns)
+            <span>🎯</span> Target Filter (India Cyber Office/WFH + Global Online Cyber Interns)
             <span id="target-count-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-500/30 text-cyan-200">...</span>
           </button>
           <button onclick="setLocationScope('all')" data-scope="all" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent transition-all">
-            🌐 All Global Roles
+            🌐 All Global Cyber Roles
           </button>
           <button onclick="setLocationScope('india')" data-scope="india" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent transition-all flex items-center gap-1">
             <span>🇮🇳</span> India (Office/WFH)

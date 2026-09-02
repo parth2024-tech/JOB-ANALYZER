@@ -37,28 +37,101 @@ INDIA_LOCATIONS = [
     "trivandrum", "thiruvananthapuram", "bhubaneswar", "coimbatore"
 ]
 
+CYBER_TITLE_PATTERNS = [
+    r'\b(cyber|cybersecurity|infosec|appsec|devsecops|secops)\b',
+    r'\b(information security|it security|cloud security|network security|systems? security)\b',
+    r'\b(product security|application security|software security|data security)\b',
+    r'\b(security engineer|security analyst|security architect|security consultant|security specialist)\b',
+    r'\b(security researcher|security operations|security manager|security director|security lead)\b',
+    r'\b(security intern|security trainee|cyber intern|infosec intern)\b',
+    r'\b(soc|siem|soar)\b',
+    r'\b(pentest|pentester|penetration test\w*)\b',
+    r'\b(red team|blue team|purple team)\b',
+    r'\b(threat\s*(intel|hunt|research|detect|analyst))\b',
+    r'\b(malware|reverse engineer\w*)\b',
+    r'\b(vulnerability|vulnerabilities)\b',
+    r'\b(incident\s*(response|responder|handler))\b',
+    r'\b(forensic|forensics|dfir)\b',
+    r'\b(cryptograph\w*)\b',
+    r'\b(identity\s*(\&|and)?\s*access|iam\s*engineer|iam\s*analyst)\b',
+    r'\b(grc\s*(analyst|engineer|specialist|consultant)?)\b',
+    r'\b(ciso|chief information security officer|iso\s*27001|soc\s*2\s*compliance)\b',
+    r'\b(bug bounty|ethical hack\w*)\b',
+    r'\b(zero trust|cnapp|edr|xdr)\b',
+    r'\bsecurity\b'
+]
+
+PHYSICAL_SECURITY_EXCLUSIONS = [
+    r'^(security officer|security guard|patrol officer|armed security)$',
+    r'\b(security guard|patrol officer|loss prevention)\b'
+]
+
+NON_CYBER_TITLE_EXCLUSIONS = [
+    r'\b(accountant|accounting|buchhalt\w*)\b',
+    r'\b(social media|content creator|copywriter)\b',
+    r'\b(sales manager|account executive|vertrieb|sales rep\w*)\b',
+    r'\b(marketing|seo|growth marketer)\b',
+    r'\b(recruiter|recruiting|talent acquisition|personalberat\w*)\b',
+    r'\b(nurse|physio|arzt|krankenpflege|bauphysi\w*)\b',
+    r'\b(civil engineer|mechanical engineer|maschinenbau|bauleiter)\b',
+    r'\b(real estate|immobilien)\b',
+    r'\b(graphic designer|product designer)\b',
+    r'\b(warehouse|driver|koch|gastronomie|hotel)\b'
+]
+
+
+def is_strictly_cyber_job(title: str, description: str = "") -> bool:
+    """Strictly verify if position is cybersecurity-related."""
+    if not title:
+        return False
+    t = title.lower().strip()
+    for exc in PHYSICAL_SECURITY_EXCLUSIONS:
+        if re.search(exc, t):
+            return False
+    for exc in NON_CYBER_TITLE_EXCLUSIONS:
+        if re.search(exc, t):
+            return False
+    for p in CYBER_TITLE_PATTERNS:
+        if re.search(p, t):
+            return True
+    return False
+
 
 def is_india_location(location: Optional[str]) -> bool:
-    """Check if location string refers to India or an Indian city."""
+    """Check if location string refers to India or an Indian city (excluding Indiana/Indianapolis)."""
     if not location:
         return False
-    loc = location.lower()
-    return any(k in loc for k in INDIA_LOCATIONS)
+    loc = location.lower().strip()
+    
+    if re.search(r'\b(india|ind)\b', loc):
+        if 'indiana' in loc or 'indianapolis' in loc:
+            pass
+        else:
+            return True
+
+    for c in INDIA_LOCATIONS:
+        if re.search(rf'\b{c}\b', loc):
+            return True
+    return False
 
 
-def is_target_opportunity(location: Optional[str], remote: Any, job_type: Optional[str]) -> bool:
+def is_target_opportunity(location: Optional[str], remote: Any, job_type: Optional[str], title: str = "") -> bool:
     """
     User-specific criteria:
-    - Any location in India: accepts either company office (onsite) or work from home (remote).
-    - Outside India: accepts ONLY online/remote internships.
+    - Must be strictly a cybersecurity job
+    - Any location in India: accepts either company office (onsite) or work from home (remote)
+    - Outside India: accepts ONLY online/remote internships
     """
+    if title and not is_strictly_cyber_job(title):
+        return False
+
     if is_india_location(location):
         return True
     
     # Outside India: Must be Remote/Online AND Internship
     loc_str = (location or "").lower()
     is_rem = bool(remote) or ("remote" in loc_str or "anywhere" in loc_str or "online" in loc_str)
-    is_intern = (job_type or "").lower() == "internship"
+    is_intern = (job_type or "").lower() == "internship" or "intern" in (title or "").lower()
     return is_rem and is_intern
 
 
@@ -143,7 +216,10 @@ class JobDatabase:
         return found
 
     def insert_job(self, job: JobEntry, keywords: List[str]) -> bool:
-        """Insert job if not duplicate. Returns True if inserted."""
+        """Insert job ONLY if it is strictly cybersecurity-related and not duplicate."""
+        if not is_strictly_cyber_job(job.title, job.description):
+            return False
+
         job.discovered_at = datetime.utcnow().isoformat()
         job.hash = self._generate_hash(job)
         job.job_type = self._classify_job_type(job.title, job.description)
@@ -248,22 +324,16 @@ class JobDatabase:
         # Location scope and target criteria filtering:
         # India: accepts any location (Office or WFH)
         # Outside India: accepts ONLY online/remote internships
+        india_sql_conditions = " OR ".join([f"location LIKE '%{k}%'" for k in INDIA_LOCATIONS])
+        india_sql = f"(({india_sql_conditions}) AND location NOT LIKE '%Indiana%' AND location NOT LIKE '%Indianapolis%')"
+        remote_intern_sql = "((job_type = 'internship' OR title LIKE '%intern%') AND (remote = 1 OR location LIKE '%Remote%' OR location LIKE '%Online%'))"
+
         if target_only or location_scope == "target":
-            india_clauses = " OR ".join(["location LIKE ?" for _ in INDIA_LOCATIONS])
-            india_vals = [f"%{k}%" for k in INDIA_LOCATIONS]
-            target_sql = f"(({india_clauses}) OR (job_type = 'internship' AND (remote = 1 OR location LIKE '%Remote%')))"
-            conditions.append(target_sql)
-            params.extend(india_vals)
+            conditions.append(f"({india_sql} OR {remote_intern_sql})")
         elif location_scope == "india":
-            india_clauses = " OR ".join(["location LIKE ?" for _ in INDIA_LOCATIONS])
-            india_vals = [f"%{k}%" for k in INDIA_LOCATIONS]
-            conditions.append(f"({india_clauses})")
-            params.extend(india_vals)
+            conditions.append(india_sql)
         elif location_scope == "global_remote_intern":
-            india_not_clauses = " AND ".join(["location NOT LIKE ?" for _ in INDIA_LOCATIONS])
-            india_vals = [f"%{k}%" for k in INDIA_LOCATIONS]
-            conditions.append(f"({india_not_clauses}) AND job_type = 'internship' AND (remote = 1 OR location LIKE '%Remote%')")
-            params.extend(india_vals)
+            conditions.append(f"(NOT {india_sql} AND {remote_intern_sql})")
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -297,8 +367,9 @@ class JobDatabase:
                 loc = item.get("location")
                 rem = item.get("remote")
                 jt = item.get("job_type")
+                tit = item.get("title", "")
                 is_ind = is_india_location(loc)
-                is_tgt = is_target_opportunity(loc, rem, jt)
+                is_tgt = is_target_opportunity(loc, rem, jt, tit)
 
                 item["is_india"] = is_ind
                 item["is_target_match"] = is_tgt
@@ -342,22 +413,16 @@ class JobDatabase:
             ).fetchone()[0]
 
             # Calculate user-specific target counts
-            india_clauses = " OR ".join(["location LIKE ?" for _ in INDIA_LOCATIONS])
-            india_not_clauses = " AND ".join(["location NOT LIKE ?" for _ in INDIA_LOCATIONS])
-            india_vals = [f"%{k}%" for k in INDIA_LOCATIONS]
+            india_sql_conditions = " OR ".join([f"location LIKE '%{k}%'" for k in INDIA_LOCATIONS])
+            india_sql = f"(({india_sql_conditions}) AND location NOT LIKE '%Indiana%' AND location NOT LIKE '%Indianapolis%')"
+            remote_intern_sql = "((job_type = 'internship' OR title LIKE '%intern%') AND (remote = 1 OR location LIKE '%Remote%' OR location LIKE '%Online%'))"
 
-            india_count = conn.execute(
-                f"SELECT COUNT(*) FROM jobs WHERE {india_clauses}", tuple(india_vals)
-            ).fetchone()[0]
-
+            india_count = conn.execute(f"SELECT COUNT(*) FROM jobs WHERE {india_sql}").fetchone()[0]
             global_remote_intern_count = conn.execute(
-                f"SELECT COUNT(*) FROM jobs WHERE ({india_not_clauses}) AND job_type = 'internship' AND (remote = 1 OR location LIKE '%Remote%')",
-                tuple(india_vals)
+                f"SELECT COUNT(*) FROM jobs WHERE NOT {india_sql} AND {remote_intern_sql}"
             ).fetchone()[0]
-
-            target_sql = f"(({india_clauses}) OR (job_type = 'internship' AND (remote = 1 OR location LIKE '%Remote%')))"
             target_count = conn.execute(
-                f"SELECT COUNT(*) FROM jobs WHERE {target_sql}", tuple(india_vals)
+                f"SELECT COUNT(*) FROM jobs WHERE {india_sql} OR {remote_intern_sql}"
             ).fetchone()[0]
 
             by_type_rows = conn.execute(
