@@ -45,7 +45,9 @@ class CyberSecWebServer:
         self.app.router.add_get("/api/jobs/{id}", self.handle_api_job_detail)
         self.app.router.add_get("/api/stats", self.handle_api_stats)
         self.app.router.add_get("/api/domains", self.handle_api_domains)
+        self.app.router.add_get("/api/sources", self.handle_api_sources)
         self.app.router.add_get("/api/status", self.handle_api_status)
+        self.app.router.add_post("/api/links/validate", self.handle_api_validate_link)
         self.app.router.add_post("/api/scrape", self.handle_api_scrape)
 
     async def handle_index(self, request: web.Request) -> web.Response:
@@ -118,6 +120,44 @@ class CyberSecWebServer:
         """Get list of domain tags with frequencies."""
         domains = self.db.get_domain_counts()
         return web.json_response({"domains": domains})
+
+    async def handle_api_sources(self, request: web.Request) -> web.Response:
+        """Get live ingestion metrics per feeder source."""
+        sources = self.db.get_sources_stats()
+        return web.json_response({"sources": sources})
+
+    async def handle_api_validate_link(self, request: web.Request) -> web.Response:
+        """Validate live HTTP status for an application link with fallback routes."""
+        try:
+            body = await request.json()
+            url = body.get("url", "")
+            title = body.get("title", "")
+            company = body.get("company", "")
+        except Exception:
+            return web.json_response({"error": "Invalid request body"}, status=400)
+
+        from database import generate_application_routes
+        routes = generate_application_routes(title, company, url)
+
+        is_live = False
+        status_code = 0
+        import aiohttp
+        try:
+            connector = aiohttp.TCPConnector(ssl=False)
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
+                async with session.head(routes["direct_url"], timeout=aiohttp.ClientTimeout(total=3), allow_redirects=True) as resp:
+                    status_code = resp.status
+                    is_live = status_code < 400
+        except Exception:
+            is_live = False
+
+        return web.json_response({
+            "url": routes["direct_url"],
+            "is_live": is_live,
+            "status_code": status_code,
+            "routes": routes
+        })
 
     async def handle_api_status(self, request: web.Request) -> web.Response:
         """Get backend engine status."""

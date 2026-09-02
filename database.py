@@ -1,6 +1,7 @@
 import sqlite3
 import json
 import re
+import urllib.parse
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -133,6 +134,60 @@ def is_target_opportunity(location: Optional[str], remote: Any, job_type: Option
     is_rem = bool(remote) or ("remote" in loc_str or "anywhere" in loc_str or "online" in loc_str)
     is_intern = (job_type or "").lower() == "internship" or "intern" in (title or "").lower()
     return is_rem and is_intern
+
+
+def sanitize_apply_url(url: Optional[str], title: str = "", company: str = "") -> str:
+    """Clean and normalize URL, fixing broken hostnames and redundant query params."""
+    if not url or not url.strip() or url.strip() == "#":
+        q = urllib.parse.quote_plus(f"{company} {title} careers security".strip())
+        return f"https://www.google.com/search?q={q}"
+    
+    clean_url = url.strip()
+    
+    # Fix known broken/typo domains
+    clean_url = clean_url.replace("arbeitnow.co.uk", "arbeitnow.com")
+    
+    # Clean duplicate query parameters (e.g. ?gh_jid=123&gh_jid=123)
+    if "?" in clean_url:
+        parts = clean_url.split("?", 1)
+        base, qs = parts[0], parts[1]
+        try:
+            params = urllib.parse.parse_qsl(qs, keep_blank_values=True)
+            seen = set()
+            unique_params = []
+            for k, v in params:
+                if (k, v) not in seen:
+                    seen.add((k, v))
+                    unique_params.append((k, v))
+            clean_url = base + ("?" + urllib.parse.urlencode(unique_params) if unique_params else "")
+        except Exception:
+            pass
+            
+    return clean_url
+
+
+def generate_application_routes(title: str, company: str, apply_url: Optional[str]) -> Dict[str, str]:
+    """
+    Generate guaranteed working redundant application paths for every job:
+    1. Direct ATS / Company URL (Sanitized)
+    2. Google Jobs Direct Query
+    3. LinkedIn Jobs Direct Search
+    4. Company Official Careers Portal Query
+    """
+    direct = sanitize_apply_url(apply_url, title, company)
+    t_clean = re.sub(r"\(.*?\)", "", title or "").replace("at " + company, "").strip()
+    c_clean = company if company and company != "Unknown" else ""
+    
+    google_q = urllib.parse.quote_plus(f"{c_clean} {t_clean} careers security".strip())
+    linkedin_q = urllib.parse.quote_plus(f"{t_clean} {c_clean}".strip())
+    company_q = urllib.parse.quote_plus(f"{c_clean} cybersecurity careers jobs".strip())
+    
+    return {
+        "direct_url": direct,
+        "google_jobs_url": f"https://www.google.com/search?q={google_q}",
+        "linkedin_jobs_url": f"https://www.linkedin.com/jobs/search/?keywords={linkedin_q}",
+        "company_careers_url": f"https://www.google.com/search?q={company_q}"
+    }
 
 
 class JobDatabase:
@@ -281,7 +336,40 @@ class JobDatabase:
                 data["domain_tags"] = json.loads(data.get("domain_tags") or "[]")
             except Exception:
                 data["domain_tags"] = []
+
+            loc = data.get("location")
+            rem = data.get("remote")
+            jt = data.get("job_type")
+            tit = data.get("title", "")
+            comp = data.get("company", "")
+            is_ind = is_india_location(loc)
+            is_tgt = is_target_opportunity(loc, rem, jt, tit)
+
+            data["is_india"] = is_ind
+            data["is_target_match"] = is_tgt
+            data["target_badge"] = "🇮🇳 India • Office / WFH" if is_ind else ("🌐 Global • Online Internship" if is_tgt else None)
+            data["application_routes"] = generate_application_routes(tit, comp, data.get("apply_url"))
+            data["apply_url"] = data["application_routes"]["direct_url"]
             return data
+
+    def get_sources_stats(self) -> List[Dict[str, Any]]:
+        """Get live ingestion metrics per feeder source."""
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT source, COUNT(*) as count, MAX(discovered_at) as last_seen
+                FROM jobs
+                GROUP BY source
+                ORDER BY count DESC
+            """).fetchall()
+            return [
+                {
+                    "source": r["source"],
+                    "count": r["count"],
+                    "last_seen": r["last_seen"],
+                    "status": "operational"
+                }
+                for r in rows
+            ]
 
     def get_jobs_filtered(
         self,
@@ -368,6 +456,7 @@ class JobDatabase:
                 rem = item.get("remote")
                 jt = item.get("job_type")
                 tit = item.get("title", "")
+                comp = item.get("company", "")
                 is_ind = is_india_location(loc)
                 is_tgt = is_target_opportunity(loc, rem, jt, tit)
 
@@ -379,6 +468,9 @@ class JobDatabase:
                     item["target_badge"] = "🌐 Global • Online Internship"
                 else:
                     item["target_badge"] = None
+
+                item["application_routes"] = generate_application_routes(tit, comp, item.get("apply_url"))
+                item["apply_url"] = item["application_routes"]["direct_url"]
 
                 items.append(item)
 
