@@ -59,10 +59,19 @@ class TelegramNotifier:
             type_emoji = "🎓" if job_type == "internship" else "💼"
             remote_emoji = "🌍" if job.get("remote") else "🏢"
 
+            from database import is_india_location, is_target_opportunity
+            if is_india_location(location):
+                scope_tag = "🇮🇳 <b>[India • Office/WFH]</b>\n"
+            elif is_target_opportunity(location, job.get("remote"), job_type):
+                scope_tag = "🌐 <b>[Global • Online Internship]</b>\n"
+            else:
+                scope_tag = ""
+
             tag_str = " ".join([f"#{t.replace(' ', '')}" for t in tags[:5]])
 
             lines.append(
                 f"{i}. {type_emoji} <b>{title}</b>\n"
+                f"   {scope_tag}"
                 f"   {remote_emoji} {company} • {location}\n"
                 f"   {tag_str}\n"
                 f"   🔗 <a href='{apply_url}'>Apply Here</a> | Source: {source}"

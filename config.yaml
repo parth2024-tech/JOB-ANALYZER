@@ -90,3 +90,11 @@ keywords:
     - "internship"
     - "trainee"
     - "co-op"
+
+# User-specific location & role criteria
+preferences:
+  target_profile:
+    # Any location in India: accepts either company office (onsite) or work from home (remote)
+    india_wfh_or_office: true
+    # Outside India: accepts ONLY online/remote internships
+    outside_india_remote_internships_only: true

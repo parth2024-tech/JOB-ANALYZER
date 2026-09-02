@@ -72,7 +72,12 @@ class CyberSecJobScraper:
             new_jobs = self.db.get_new_jobs(since, limit=50)
 
             if new_jobs:
-                await self.notifier.send_job_alert(new_jobs)
+                from database import is_target_opportunity
+                # Prioritize India (Office/WFH) and Global Online Internships
+                target_jobs = [j for j in new_jobs if is_target_opportunity(j.get("location"), j.get("remote"), j.get("job_type"))]
+                other_jobs = [j for j in new_jobs if not is_target_opportunity(j.get("location"), j.get("remote"), j.get("job_type"))]
+                ordered_jobs = target_jobs + other_jobs
+                await self.notifier.send_job_alert(ordered_jobs)
 
             await self.notifier.send_summary(stats, source_counts)
 

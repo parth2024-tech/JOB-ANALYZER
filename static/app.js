@@ -7,6 +7,7 @@ const state = {
   search: '',
   type: 'all',
   domain: 'all',
+  locationScope: 'target', // 'target' (India Office/WFH + Global Online Interns), 'all', 'india', 'global_remote_intern'
   remote: null,
   sort: 'newest',
   page: 1,
@@ -156,11 +157,26 @@ async function loadStats() {
 
     document.getElementById('stat-total-jobs').textContent = stats.total.toLocaleString();
     document.getElementById('stat-internships').textContent = stats.internships.toLocaleString();
-    document.getElementById('stat-remote-pct').textContent = `${stats.remote_pct}%`;
 
-    const topDomainEntry = Object.entries(stats.top_domains || {})[0];
-    const topDomainName = topDomainEntry ? topDomainEntry[0] : 'Security Eng';
-    document.getElementById('stat-top-domain').textContent = topDomainName.toUpperCase();
+    // Target telemetry counters
+    if (document.getElementById('stat-target-matches')) {
+      document.getElementById('stat-target-matches').textContent = (stats.target_count || 0).toLocaleString();
+    }
+    if (document.getElementById('stat-india-jobs')) {
+      document.getElementById('stat-india-jobs').textContent = (stats.india_count || 0).toLocaleString();
+    }
+    if (document.getElementById('stat-global-remote-interns')) {
+      document.getElementById('stat-global-remote-interns').textContent = (stats.global_remote_intern_count || 0).toLocaleString();
+    }
+    if (document.getElementById('target-count-badge')) {
+      document.getElementById('target-count-badge').textContent = (stats.target_count || 0).toLocaleString();
+    }
+    if (document.getElementById('india-count-badge')) {
+      document.getElementById('india-count-badge').textContent = (stats.india_count || 0).toLocaleString();
+    }
+    if (document.getElementById('global-intern-count-badge')) {
+      document.getElementById('global-intern-count-badge').textContent = (stats.global_remote_intern_count || 0).toLocaleString();
+    }
 
     if (stats.last_scraped) {
       const date = new Date(stats.last_scraped);
@@ -175,6 +191,21 @@ async function loadStats() {
   } catch (e) {
     console.error('Failed to load stats:', e);
   }
+}
+
+// Select Location Scope filter
+function setLocationScope(scope) {
+  state.locationScope = scope;
+  state.page = 1;
+  document.querySelectorAll('#location-scope-tabs button').forEach(btn => {
+    const active = btn.getAttribute('data-scope') === scope;
+    btn.className = `px-3 py-1.5 rounded-lg text-xs font-mono transition-all flex items-center gap-1.5 ${
+      active 
+        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/60 font-bold shadow-sm'
+        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent'
+    }`;
+  });
+  loadJobs();
 }
 
 // Render Telemetry Charts
@@ -313,6 +344,7 @@ async function loadJobs() {
       search: state.search,
       type: state.type,
       domain: state.domain,
+      location_scope: state.locationScope,
       sort: state.sort,
       page: state.page,
       page_size: state.pageSize
@@ -332,7 +364,14 @@ async function loadJobs() {
       jobs = jobs.filter(j => state.savedJobIds.has(j.id));
       dom.jobCountText.textContent = `Showing ${jobs.length} Bookmarked Opportunities`;
     } else {
-      dom.jobCountText.textContent = `Showing ${(data.total === 0 ? 0 : (data.page - 1) * data.page_size + 1)}–${Math.min(data.page * data.page_size, data.total)} of ${data.total.toLocaleString()} positions`;
+      const scopeLabel = state.locationScope === 'target' 
+        ? ' [🎯 Target: India (Office/WFH) + Global Online Internships]' 
+        : state.locationScope === 'india' 
+        ? ' [🇮🇳 India Only]' 
+        : state.locationScope === 'global_remote_intern' 
+        ? ' [💻 Global Remote Interns Only]' 
+        : '';
+      dom.jobCountText.textContent = `Showing ${(data.total === 0 ? 0 : (data.page - 1) * data.page_size + 1)}–${Math.min(data.page * data.page_size, data.total)} of ${data.total.toLocaleString()} positions${scopeLabel}`;
     }
 
     renderJobCards(jobs);
@@ -360,7 +399,7 @@ function renderJobCards(jobs) {
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
         </svg>
         <h3 class="text-base font-semibold text-slate-300">No matching security positions located</h3>
-        <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Try adjusting your keywords, toggling remote filters, or clearing the specialization pill.</p>
+        <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Try switching to "All Global Roles" or clearing specific specialization filters.</p>
         <button onclick="resetFilters()" class="mt-4 px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs rounded-lg hover:bg-cyan-500/20 transition-all font-mono">
           Reset Filter Matrix
         </button>
@@ -382,6 +421,16 @@ function renderJobCards(jobs) {
 
     const typeLabel = isInternship ? '🎓 Internship' : isContract ? '📝 Contract' : '💼 Full-Time';
 
+    const targetBadgeHtml = job.target_badge ? `
+      <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+        job.is_india 
+          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' 
+          : 'bg-purple-500/15 text-purple-300 border-purple-500/40'
+      }">
+        ${escapeHtml(job.target_badge)}
+      </span>
+    ` : '';
+
     const locationText = job.remote 
       ? `🌍 ${job.location || 'Remote'} (Remote)` 
       : `🏢 ${job.location || 'Onsite'}`;
@@ -400,12 +449,15 @@ function renderJobCards(jobs) {
     return `
       <div class="hud-card rounded-xl p-5 flex flex-col justify-between group relative border border-slate-800">
         <div>
-          <!-- Top Row: Type & Save -->
-          <div class="flex items-center justify-between gap-2 mb-3">
-            <span class="text-[11px] font-mono px-2.5 py-0.5 rounded-full border ${typeBadgeClass}">
-              ${typeLabel}
-            </span>
-            <div class="flex items-center gap-1.5">
+          <!-- Top Row: Type, Target & Save -->
+          <div class="flex items-start justify-between gap-2 mb-3">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="text-[11px] font-mono px-2.5 py-0.5 rounded-full border ${typeBadgeClass}">
+                ${typeLabel}
+              </span>
+              ${targetBadgeHtml}
+            </div>
+            <div class="flex items-center gap-1.5 flex-shrink-0">
               <span class="text-[10px] font-mono text-slate-500">${formattedDate}</span>
               <button onclick="toggleBookmark('${escapeHtml(job.id)}', event)" 
                 title="${isSaved ? 'Remove Bookmark' : 'Bookmark Job'}"
@@ -503,8 +555,11 @@ async function openJobModal(jobId) {
     dom.modalContent.innerHTML = `
       <div class="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
         <div>
-          <span class="text-xs font-mono uppercase tracking-wider text-cyan-400">${escapeHtml(job.job_type || 'Full-Time')}</span>
-          <h2 class="text-xl font-bold text-white mt-1">${escapeHtml(job.title)}</h2>
+          <div class="flex items-center gap-2 flex-wrap mb-1">
+            <span class="text-xs font-mono uppercase tracking-wider text-cyan-400 font-bold">${escapeHtml(job.job_type || 'Full-Time')}</span>
+            ${job.target_badge ? `<span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${job.is_india ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' : 'bg-purple-500/20 text-purple-300 border-purple-500/40'}">${escapeHtml(job.target_badge)}</span>` : ''}
+          </div>
+          <h2 class="text-xl font-bold text-white">${escapeHtml(job.title)}</h2>
           <p class="text-sm font-semibold text-slate-300 mt-0.5">
             <span class="text-cyan-400">Company:</span> ${escapeHtml(job.company)} 
             <span class="text-slate-500 mx-2">•</span> 
@@ -712,6 +767,7 @@ function resetFilters() {
   state.search = '';
   state.type = 'all';
   state.domain = 'all';
+  state.locationScope = 'target';
   state.remote = null;
   state.sort = 'newest';
   state.page = 1;
@@ -720,6 +776,7 @@ function resetFilters() {
   dom.remoteToggle.checked = false;
   dom.sortSelect.value = 'newest';
   setJobType('all');
+  setLocationScope('target');
   loadDomains();
   loadJobs();
 }

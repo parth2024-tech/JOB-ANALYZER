@@ -63,6 +63,8 @@ class CyberSecWebServer:
         domain = params.get("domain", "").strip()
         source = params.get("source", "").strip()
         sort_by = params.get("sort", "newest").strip()
+        location_scope = params.get("location_scope", "all").strip()
+        target_only = params.get("target_only", "").lower().strip() in ("1", "true", "yes")
 
         # Remote filter handling
         remote_val = params.get("remote", "").lower().strip()
@@ -90,6 +92,8 @@ class CyberSecWebServer:
             remote=remote,
             source=source,
             sort_by=sort_by,
+            location_scope=location_scope,
+            target_only=target_only,
             page=page,
             page_size=page_size
         )

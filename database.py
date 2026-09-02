@@ -30,6 +30,38 @@ class JobEntry:
     hash: str = ""
 
 
+INDIA_LOCATIONS = [
+    "india", "bengaluru", "bangalore", "hyderabad", "mumbai", "pune",
+    "delhi", "noida", "gurgaon", "gurugram", "chennai", "kolkata",
+    "ahmedabad", "jaipur", "kochi", "cochin", "indore", "chandigarh",
+    "trivandrum", "thiruvananthapuram", "bhubaneswar", "coimbatore"
+]
+
+
+def is_india_location(location: Optional[str]) -> bool:
+    """Check if location string refers to India or an Indian city."""
+    if not location:
+        return False
+    loc = location.lower()
+    return any(k in loc for k in INDIA_LOCATIONS)
+
+
+def is_target_opportunity(location: Optional[str], remote: Any, job_type: Optional[str]) -> bool:
+    """
+    User-specific criteria:
+    - Any location in India: accepts either company office (onsite) or work from home (remote).
+    - Outside India: accepts ONLY online/remote internships.
+    """
+    if is_india_location(location):
+        return True
+    
+    # Outside India: Must be Remote/Online AND Internship
+    loc_str = (location or "").lower()
+    is_rem = bool(remote) or ("remote" in loc_str or "anywhere" in loc_str or "online" in loc_str)
+    is_intern = (job_type or "").lower() == "internship"
+    return is_rem and is_intern
+
+
 class JobDatabase:
     def __init__(self, db_path: str = "jobs.db"):
         self.db_path = Path(db_path)
@@ -183,6 +215,8 @@ class JobDatabase:
         remote: Optional[bool] = None,
         source: str = "",
         sort_by: str = "newest",
+        location_scope: str = "all",  # "all", "target", "india", "global_remote_intern"
+        target_only: bool = False,
         page: int = 1,
         page_size: int = 24
     ) -> Dict[str, Any]:
@@ -211,6 +245,26 @@ class JobDatabase:
             conditions.append("source = ?")
             params.append(source)
 
+        # Location scope and target criteria filtering:
+        # India: accepts any location (Office or WFH)
+        # Outside India: accepts ONLY online/remote internships
+        if target_only or location_scope == "target":
+            india_clauses = " OR ".join(["location LIKE ?" for _ in INDIA_LOCATIONS])
+            india_vals = [f"%{k}%" for k in INDIA_LOCATIONS]
+            target_sql = f"(({india_clauses}) OR (job_type = 'internship' AND (remote = 1 OR location LIKE '%Remote%')))"
+            conditions.append(target_sql)
+            params.extend(india_vals)
+        elif location_scope == "india":
+            india_clauses = " OR ".join(["location LIKE ?" for _ in INDIA_LOCATIONS])
+            india_vals = [f"%{k}%" for k in INDIA_LOCATIONS]
+            conditions.append(f"({india_clauses})")
+            params.extend(india_vals)
+        elif location_scope == "global_remote_intern":
+            india_not_clauses = " AND ".join(["location NOT LIKE ?" for _ in INDIA_LOCATIONS])
+            india_vals = [f"%{k}%" for k in INDIA_LOCATIONS]
+            conditions.append(f"({india_not_clauses}) AND job_type = 'internship' AND (remote = 1 OR location LIKE '%Remote%')")
+            params.extend(india_vals)
+
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
         # Order by mapping
@@ -238,6 +292,23 @@ class JobDatabase:
                     item["domain_tags"] = json.loads(item.get("domain_tags") or "[]")
                 except Exception:
                     item["domain_tags"] = []
+
+                # Tag opportunity for user criteria
+                loc = item.get("location")
+                rem = item.get("remote")
+                jt = item.get("job_type")
+                is_ind = is_india_location(loc)
+                is_tgt = is_target_opportunity(loc, rem, jt)
+
+                item["is_india"] = is_ind
+                item["is_target_match"] = is_tgt
+                if is_ind:
+                    item["target_badge"] = "🇮🇳 India • Office / WFH"
+                elif is_tgt:
+                    item["target_badge"] = "🌐 Global • Online Internship"
+                else:
+                    item["target_badge"] = None
+
                 items.append(item)
 
             total_pages = (total + page_size - 1) // page_size if total > 0 else 1
@@ -257,6 +328,7 @@ class JobDatabase:
             if total == 0:
                 return {
                     "total": 0, "internships": 0, "remote": 0, "remote_pct": 0,
+                    "target_count": 0, "india_count": 0, "global_remote_intern_count": 0,
                     "by_type": {}, "by_source": {}, "top_companies": [],
                     "top_domains": {}, "last_scraped": None
                 }
@@ -267,6 +339,25 @@ class JobDatabase:
 
             remote_count = conn.execute(
                 "SELECT COUNT(*) FROM jobs WHERE remote = 1"
+            ).fetchone()[0]
+
+            # Calculate user-specific target counts
+            india_clauses = " OR ".join(["location LIKE ?" for _ in INDIA_LOCATIONS])
+            india_not_clauses = " AND ".join(["location NOT LIKE ?" for _ in INDIA_LOCATIONS])
+            india_vals = [f"%{k}%" for k in INDIA_LOCATIONS]
+
+            india_count = conn.execute(
+                f"SELECT COUNT(*) FROM jobs WHERE {india_clauses}", tuple(india_vals)
+            ).fetchone()[0]
+
+            global_remote_intern_count = conn.execute(
+                f"SELECT COUNT(*) FROM jobs WHERE ({india_not_clauses}) AND job_type = 'internship' AND (remote = 1 OR location LIKE '%Remote%')",
+                tuple(india_vals)
+            ).fetchone()[0]
+
+            target_sql = f"(({india_clauses}) OR (job_type = 'internship' AND (remote = 1 OR location LIKE '%Remote%')))"
+            target_count = conn.execute(
+                f"SELECT COUNT(*) FROM jobs WHERE {target_sql}", tuple(india_vals)
             ).fetchone()[0]
 
             by_type_rows = conn.execute(
@@ -298,6 +389,9 @@ class JobDatabase:
                 "internships": internships,
                 "remote": remote_count,
                 "remote_pct": round((remote_count / total) * 100, 1) if total > 0 else 0,
+                "target_count": target_count,
+                "india_count": india_count,
+                "global_remote_intern_count": global_remote_intern_count,
                 "by_type": by_type,
                 "by_source": by_source,
                 "top_companies": top_companies,
