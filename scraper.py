@@ -3,14 +3,24 @@ import aiohttp
 import feedparser
 import re
 import json
+import random
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from bs4 import BeautifulSoup
 from dataclasses import dataclass
 import yaml
 from pathlib import Path
 
-from database import JobEntry, JobDatabase
+from database import JobEntry, JobDatabase, is_strictly_cyber_job, detect_seniority, extract_skills
+
+
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+]
 
 
 @dataclass
@@ -26,70 +36,117 @@ class ScraperEngine:
         self.db = db or JobDatabase()
         self.session: Optional[aiohttp.ClientSession] = None
         self.keywords = self.config.get("keywords", {}).get("domains", [])
+        # Semaphore: max 8 concurrent requests
+        self._sem = asyncio.Semaphore(8)
 
     def _load_config(self, path: str) -> Dict:
         with open(path) as f:
             return yaml.safe_load(f)
 
     async def __aenter__(self):
-        timeout = aiohttp.ClientTimeout(total=30)
-        self.session = aiohttp.ClientSession(timeout=timeout)
+        connector = aiohttp.TCPConnector(ssl=False, limit=20, limit_per_host=3)
+        timeout = aiohttp.ClientTimeout(total=20)
+        self.session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=timeout,
+            headers={"User-Agent": random.choice(USER_AGENTS)}
+        )
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if self.session:
             await self.session.close()
 
-    async def fetch(self, url: str) -> Optional[str]:
-        """Fetch URL with retry logic."""
-        try:
-            async with self.session.get(url) as resp:
-                if resp.status == 200:
-                    return await resp.text()
-                else:
-                    print(f"HTTP {resp.status} for {url}")
-                    return None
-        except Exception as e:
-            print(f"Fetch error {url}: {e}")
-            return None
+    async def fetch(self, url: str, retries: int = 3) -> Optional[str]:
+        """Fetch URL with exponential-backoff retries and UA rotation."""
+        async with self._sem:
+            for attempt in range(retries):
+                try:
+                    hdrs = {"User-Agent": random.choice(USER_AGENTS)}
+                    async with self.session.get(url, headers=hdrs, allow_redirects=True) as resp:
+                        if resp.status == 200:
+                            return await resp.text(errors="replace")
+                        elif resp.status == 429:
+                            retry_after = int(resp.headers.get("Retry-After", 5))
+                            await asyncio.sleep(retry_after)
+                        elif resp.status in (403, 404, 410):
+                            return None  # No point retrying
+                        else:
+                            print(f"HTTP {resp.status} for {url}")
+                except asyncio.TimeoutError:
+                    pass
+                except Exception as e:
+                    print(f"Fetch error {url}: {e}")
+
+                if attempt < retries - 1:
+                    await asyncio.sleep(2 ** attempt)  # exponential backoff
+        return None
 
     async def scrape_all(self) -> Dict[str, int]:
-        """Run all scrapers and return counts per source."""
-        results = {}
+        """Run ALL scrapers concurrently and return counts per source."""
+        tasks = []
+        sources_cfg = self.config.get("sources", {})
 
-        # RSS Feeds
-        for src in self.config.get("sources", {}).get("rss_feeds", []):
-            count = await self.scrape_rss(SourceConfig(**src))
-            results[src["name"]] = count
+        for src in sources_cfg.get("rss_feeds", []):
+            tasks.append(self._run_source(self.scrape_rss, SourceConfig(**src)))
 
-        # GitHub Markdown Lists
-        for src in self.config.get("sources", {}).get("github_repos", []):
+        for src in sources_cfg.get("github_repos", []):
             if src.get("type") == "github_api_dir":
-                count = await self.scrape_github_api_dir(SourceConfig(**src))
+                tasks.append(self._run_source(self.scrape_github_api_dir, SourceConfig(**src)))
             else:
-                count = await self.scrape_github_markdown(SourceConfig(**src))
-            results[src["name"]] = count
+                tasks.append(self._run_source(self.scrape_github_markdown, SourceConfig(**src)))
 
-        # JSON APIs
-        for src in self.config.get("sources", {}).get("json_apis", []):
-            count = await self.scrape_json_api(SourceConfig(**src))
-            results[src["name"]] = count
+        for src in sources_cfg.get("json_apis", []):
+            tasks.append(self._run_source(self.scrape_json_api, SourceConfig(**src)))
 
-        # ATS Boards
-        for src in self.config.get("sources", {}).get("ats_boards", []):
-            count = await self.scrape_ats_board(SourceConfig(**src))
-            results[src["name"]] = count
+        for src in sources_cfg.get("ats_boards", []):
+            tasks.append(self._run_source(self.scrape_ats_board, SourceConfig(**src)))
+
+        results_list = await asyncio.gather(*tasks, return_exceptions=True)
+
+        results = {}
+        for result in results_list:
+            if isinstance(result, dict):
+                results.update(result)
+            elif isinstance(result, Exception):
+                print(f"Source error: {result}")
 
         return results
 
+    async def _run_source(self, method, src: SourceConfig) -> Dict[str, int]:
+        """Run a single source scraper, log results to DB."""
+        start = datetime.utcnow().isoformat()
+        new_jobs = 0
+        total_fetched = 0
+        status = "ok"
+        error = ""
+        try:
+            result = await method(src)
+            if isinstance(result, tuple):
+                new_jobs, total_fetched = result
+            else:
+                new_jobs = result or 0
+                total_fetched = new_jobs
+        except Exception as e:
+            status = "error"
+            error = str(e)
+            print(f"[ERROR] {src.name}: {e}")
+        finally:
+            try:
+                self.db.log_scrape_run(src.name, new_jobs, total_fetched, status, error)
+            except Exception:
+                pass
+        return {src.name: new_jobs}
+
     # ============ RSS Scraper ============
-    async def scrape_rss(self, src: SourceConfig) -> int:
+    async def scrape_rss(self, src: SourceConfig) -> Tuple[int, int]:
         print(f"[RSS] Fetching {src.name}...")
         content = await self.fetch(src.url)
         if not content:
-            return 0
+            return 0, 0
 
         feed = feedparser.parse(content)
+        total = len(feed.entries)
         count = 0
 
         for entry in feed.entries:
@@ -97,8 +154,8 @@ class ScraperEngine:
             if job and self.db.insert_job(job, self.keywords):
                 count += 1
 
-        print(f"[RSS] {src.name}: {count} new jobs")
-        return count
+        print(f"[RSS] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
 
     def _parse_rss_entry(self, entry, src: SourceConfig) -> Optional[JobEntry]:
         try:
@@ -106,32 +163,26 @@ class ScraperEngine:
             link = entry.get("link", "")
             description = entry.get("summary", entry.get("description", ""))
 
-            # Clean HTML from description
             soup = BeautifulSoup(description, "html.parser")
             description = soup.get_text()[:5000]
 
-            # Extract company - try various fields
             company = ""
             if "author" in entry:
                 company = entry.author
             elif "publisher" in entry:
                 company = entry.publisher
             else:
-                # Try to extract from title
                 parts = title.split(" at ")
                 if len(parts) > 1:
                     company = parts[-1].split(" (")[0].strip()
                 else:
                     company = "Unknown"
 
-            # Location
             location = entry.get("location", "Remote")
             remote = "remote" in location.lower() or "anywhere" in location.lower()
-
-            # Posted date
             posted = entry.get("published", entry.get("updated", ""))
 
-            job = JobEntry(
+            return JobEntry(
                 id=f"rss_{src.name}_{hash(link)}",
                 source=src.name,
                 source_url=src.url,
@@ -139,85 +190,56 @@ class ScraperEngine:
                 company=company,
                 location=location,
                 remote=remote,
-                job_type="",  # Will be classified
-                domain_tags=[],  # Will be classified
+                job_type="",
+                domain_tags=[],
                 description=description,
                 apply_url=link,
                 posted_date=posted,
             )
-            return job
         except Exception as e:
             print(f"RSS parse error: {e}")
             return None
 
-    # ============ GitHub Markdown Scraper ============
-    async def scrape_github_markdown(self, src: SourceConfig) -> int:
-        print(f"[GitHub] Fetching {src.name}...")
-        content = await self.fetch(src.url)
-        if not content:
-            return 0
-
-        count = 0
-        # Pattern: [Title](URL) - Company | Location
-        # or **Title** - Company | Location | URL
-        lines = content.split("\n")
-
-        for line in lines:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-
-            job = self._parse_markdown_line(line, src)
-            if job and self.db.insert_job(job, self.keywords):
-                count += 1
-
-        print(f"[GitHub] {src.name}: {count} new jobs")
-        return count
-
     # ============ GitHub API Directory Scraper ============
-    async def scrape_github_api_dir(self, src: SourceConfig) -> int:
-        """Scrape jobs from GitHub API directory listing (e.g., NotifyYouInc 2026-Cybersecurity-Jobs jobs/ dir)."""
+    async def scrape_github_api_dir(self, src: SourceConfig) -> Tuple[int, int]:
         print(f"[GitHub API] Fetching {src.name}...")
         content = await self.fetch(src.url)
         if not content:
-            return 0
+            return 0, 0
 
         try:
             files = json.loads(content)
         except json.JSONDecodeError:
-            print(f"Invalid JSON from {src.url}")
-            return 0
+            return 0, 0
 
+        md_files = [f for f in files if isinstance(f, dict) and f.get("name", "").endswith(".md")]
+        total = len(md_files)
         count = 0
-        for file_info in files:
-            if not isinstance(file_info, dict):
-                continue
-            if file_info.get("name", "").endswith(".md"):
-                # Fetch the individual markdown file
-                download_url = file_info.get("download_url")
-                if not download_url:
-                    continue
-                md_content = await self.fetch(download_url)
-                if not md_content:
-                    continue
-                job = self._parse_github_job_markdown(md_content, src, file_info.get("name", ""))
-                if job and self.db.insert_job(job, self.keywords):
-                    count += 1
 
-        print(f"[GitHub API] {src.name}: {count} new jobs")
-        return count
+        # Fetch all markdown files concurrently
+        async def fetch_and_parse(file_info):
+            download_url = file_info.get("download_url")
+            if not download_url:
+                return False
+            md_content = await self.fetch(download_url)
+            if not md_content:
+                return False
+            job = self._parse_github_job_markdown(md_content, src, file_info.get("name", ""))
+            return job and self.db.insert_job(job, self.keywords)
+
+        results = await asyncio.gather(*[fetch_and_parse(f) for f in md_files], return_exceptions=True)
+        count = sum(1 for r in results if r is True)
+
+        print(f"[GitHub API] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
 
     def _parse_github_job_markdown(self, content: str, src: SourceConfig, filename: str) -> Optional[JobEntry]:
-        """Parse a single job markdown file from NotifyYouInc format (markdown table)."""
         try:
             lines = content.strip().split("\n")
-            title = ""
-            company = ""
+            title = company = apply_url = ""
             location = "Remote"
-            apply_url = ""
             description = ""
 
-            # Parse markdown table format
             in_table = False
             for line in lines:
                 line = line.strip()
@@ -229,27 +251,20 @@ class ScraperEngine:
                 if in_table and line.startswith("| "):
                     parts = [p.strip() for p in line.split("|")[1:-1]]
                     if len(parts) >= 2:
-                        field = parts[0].strip()
-                        value = parts[1].strip()
+                        field, value = parts[0].strip(), parts[1].strip()
                         if field == "Company":
-                            # Extract company name from markdown link
-                            import re
                             m = re.search(r"\[([^\]]+)\]", value)
                             company = m.group(1) if m else value
                         elif field == "Location":
                             location = value
                         elif field == "Apply":
-                            # Extract URL from markdown link
                             m = re.search(r"\((https?://[^)]+)\)", value)
                             apply_url = m.group(1) if m else value
                 elif line.startswith("# "):
-                    # Title from first heading
                     title = line[2:].strip()
 
-            # If no title found, try to extract from filename
             if not title:
                 name = filename.replace(".md", "")
-                # filename like: "company-role-description.md"
                 parts = name.split("-")
                 if len(parts) > 1:
                     company = parts[0].replace("-", " ").title()
@@ -257,7 +272,6 @@ class ScraperEngine:
                 else:
                     title = name.replace("-", " ").title()
 
-            # Try to extract description from "## About This Role" section
             for i, line in enumerate(lines):
                 if line.startswith("## About This Role") and i + 1 < len(lines):
                     description = lines[i + 1].strip()
@@ -266,72 +280,75 @@ class ScraperEngine:
             if not title or not company:
                 return None
 
-            remote = "remote" in location.lower()
-
-            job = JobEntry(
+            return JobEntry(
                 id=f"github_api_{src.name}_{hash(filename)}",
                 source=src.name,
                 source_url=src.url,
                 title=title,
                 company=company,
                 location=location,
-                remote=remote,
+                remote="remote" in location.lower(),
                 job_type="",
                 domain_tags=[],
                 description=description[:5000],
                 apply_url=apply_url,
             )
-            return job
         except Exception as e:
-            print(f"GitHub API markdown parse error: {e}")
+            print(f"GitHub markdown parse error: {e}")
             return None
+
+    # ============ GitHub Markdown Scraper ============
+    async def scrape_github_markdown(self, src: SourceConfig) -> Tuple[int, int]:
+        print(f"[GitHub] Fetching {src.name}...")
+        content = await self.fetch(src.url)
+        if not content:
+            return 0, 0
+
+        lines = content.split("\n")
+        total = len(lines)
+        count = 0
+
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            job = self._parse_markdown_line(line, src)
+            if job and self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[GitHub] {src.name}: {count} new cyber jobs")
+        return count, total
 
     def _parse_markdown_line(self, line: str, src: SourceConfig) -> Optional[JobEntry]:
         try:
-            # Skip obvious non-job lines
             line_lower = line.lower()
             skip_patterns = [
-                "back to top", "back to the top",
-                "resume template", "cover letter",
-                "openings tracker", "when big tech",
-                "contribute by submitting",
-                "contribution guidelines",
-                "use this repo to share",
-                "updated daily by",
-                "coder quad",
-                "simplify.jobs",
-                "github.com/simplifyjobs",
+                "back to top", "back to the top", "resume template", "cover letter",
+                "openings tracker", "when big tech", "contribute by submitting",
+                "contribution guidelines", "use this repo to share", "updated daily by",
+                "coder quad", "simplify.jobs", "github.com/simplifyjobs",
             ]
-            if any(pattern in line_lower for pattern in skip_patterns):
+            if any(p in line_lower for p in skip_patterns):
                 return None
 
-            # Skip lines that are just section headers with emoji counts like "💻 **** (245)"
             if re.match(r"^[\U0001f300-\U0001faff]\s+\*{2,}\s+\(\d+\)", line):
                 return None
 
-            # Skip lines that are just emoji headers like "💻 Software Engineering @ 💻 **** (245)"
-            if re.match(r"^[\U0001f300-\U0001faff]\s+\w+", line) and "@" in line and "****" in line:
-                return None
-
-            # Try [Title](URL) pattern
             md_link_match = re.search(r"\[([^\]]+)\]\(([^)]+)\)", line)
             if md_link_match:
                 title = md_link_match.group(1).strip()
                 url = md_link_match.group(2).strip()
                 remaining = line.replace(md_link_match.group(0), "")
             else:
-                # Try **Title** pattern
                 bold_match = re.search(r"\*\*([^*]+)\*\*", line)
                 if bold_match:
                     title = bold_match.group(1).strip()
-                    # Find URL in line
                     url_match = re.search(r"https?://\S+", line)
                     url = url_match.group(0) if url_match else ""
                     remaining = line.replace(bold_match.group(0), "")
                 else:
                     return None
 
-            # Skip if title looks like a section header or navigation
             title_lower = title.lower()
             if title_lower in ["back to top", "other", "hardware engineering", "quantitative finance",
                                 "data science, ai & machine learning", "product management",
@@ -339,193 +356,197 @@ class ScraperEngine:
                                 "issue", "simplify"]:
                 return None
 
-            # Extract company/location from remaining text
             parts = [p.strip() for p in remaining.split("|")]
-
             company = parts[0] if parts else "Unknown"
             location = parts[1] if len(parts) > 1 else "Remote"
-            remote = "remote" in location.lower()
 
-            # Skip if URL is just a fragment anchor or points to the repo itself
             if url.startswith("#") or "github.com/SimplifyJobs/New-Grad-Positions" in url:
                 return None
 
-            job = JobEntry(
+            return JobEntry(
                 id=f"github_{src.name}_{hash(title+url)}",
                 source=src.name,
                 source_url=src.url,
                 title=title,
                 company=company,
                 location=location,
-                remote=remote,
+                remote="remote" in location.lower(),
                 job_type="",
                 domain_tags=[],
                 description="",
                 apply_url=url,
             )
-            return job
         except Exception as e:
             print(f"Markdown parse error: {e}")
             return None
 
     # ============ JSON API Scraper ============
-    async def scrape_json_api(self, src: SourceConfig) -> int:
+    async def scrape_json_api(self, src: SourceConfig) -> Tuple[int, int]:
         print(f"[JSON API] Fetching {src.name}...")
         content = await self.fetch(src.url)
         if not content:
-            return 0
+            return 0, 0
 
         try:
             data = json.loads(content)
         except json.JSONDecodeError:
-            print(f"Invalid JSON from {src.url}")
-            return 0
+            return 0, 0
 
+        jobs_raw = self._extract_jobs_from_json(data, src.type)
+        total = len(jobs_raw)
         count = 0
-        jobs = self._extract_jobs_from_json(data, src.type)
 
-        for job_data in jobs:
+        for job_data in jobs_raw:
             job = self._normalize_json_job(job_data, src)
             if job and self.db.insert_job(job, self.keywords):
                 count += 1
 
-        print(f"[JSON API] {src.name}: {count} new jobs")
-        return count
+        print(f"[JSON API] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
 
     def _extract_jobs_from_json(self, data: Any, api_type: str) -> List[Dict]:
-        """Extract job list from various JSON API structures."""
-        if api_type == "hn_hiring":
-            # Hacker News hiring thread - fetch comments recursively
-            return []
-        elif api_type == "json_api":
-            # Generic: try common keys
-            if isinstance(data, list):
-                return data
-            for key in ["jobs", "data", "results", "items", "positions"]:
-                if key in data and isinstance(data[key], list):
-                    return data[key]
-            return [data] if isinstance(data, dict) else []
-        elif api_type == "ats_json":
-            # Greenhouse/ATS format
-            if isinstance(data, list):
-                return data
-            if isinstance(data, dict) and "jobs" in data:
-                return data["jobs"]
-            return []
-        return []
+        if isinstance(data, list):
+            return data
+        for key in ["jobs", "data", "results", "items", "positions", "SearchResult", "search_result"]:
+            if isinstance(data, dict) and key in data:
+                val = data[key]
+                if isinstance(val, list):
+                    return val
+                if isinstance(val, dict):
+                    # USAJobs nests deeper
+                    for subkey in ["SearchResultItems", "items", "results"]:
+                        if subkey in val and isinstance(val[subkey], list):
+                            return val[subkey]
+        return [data] if isinstance(data, dict) else []
 
     def _normalize_json_job(self, job_data: Dict, src: SourceConfig) -> Optional[JobEntry]:
         try:
-            # Common field mappings
-            title = job_data.get("title", job_data.get("name", job_data.get("position", "")))
-            company = job_data.get("company", job_data.get("company_name", src.name))
-            location = job_data.get("location", job_data.get("location_name", "Remote"))
-            url = job_data.get("apply_url", job_data.get("url", job_data.get("absolute_url", "")))
-            description = job_data.get("description", job_data.get("content", ""))
+            title = job_data.get("title", job_data.get("name", job_data.get("position",
+                    job_data.get("MatchedObjectDescriptor", {}).get("PositionTitle", ""))))
+            if isinstance(title, dict):
+                title = str(title)
 
-            # Clean HTML
+            company = job_data.get("company", job_data.get("company_name",
+                       job_data.get("MatchedObjectDescriptor", {}).get("OrganizationName", src.name)))
+
+            location_raw = job_data.get("location", job_data.get("location_name",
+                           job_data.get("MatchedObjectDescriptor", {}).get("PositionLocationDisplay", "Remote")))
+            if isinstance(location_raw, dict):
+                location = location_raw.get("name", "Remote")
+            else:
+                location = location_raw or "Remote"
+
+            url = job_data.get("apply_url", job_data.get("url", job_data.get("absolute_url",
+                  job_data.get("MatchedObjectDescriptor", {}).get("ApplyURI", [""])[0]
+                  if isinstance(job_data.get("MatchedObjectDescriptor", {}).get("ApplyURI"), list) else "")))
+
+            description = job_data.get("description", job_data.get("content",
+                          job_data.get("MatchedObjectDescriptor", {}).get("UserArea", {})
+                          .get("Details", {}).get("JobSummary", "")))
             if description:
-                soup = BeautifulSoup(description, "html.parser")
+                soup = BeautifulSoup(str(description), "html.parser")
                 description = soup.get_text()[:5000]
 
             remote = job_data.get("remote", False)
             if isinstance(remote, str):
                 remote = "remote" in remote.lower()
 
-            # Posted date
-            posted = job_data.get("created_at", job_data.get("updated_at", job_data.get("date", "")))
+            posted = job_data.get("created_at", job_data.get("updated_at", job_data.get("date",
+                     job_data.get("MatchedObjectDescriptor", {}).get("PublicationStartDate", ""))))
 
-            job = JobEntry(
-                id=f"json_{src.name}_{hash(str(job_data.get('id', title+company)))}",
+            return JobEntry(
+                id=f"json_{src.name}_{hash(str(job_data.get('id', str(title)+str(company))))}",
                 source=src.name,
                 source_url=src.url,
-                title=title,
-                company=company,
-                location=location,
-                remote=remote,
+                title=str(title),
+                company=str(company),
+                location=str(location),
+                remote=bool(remote),
                 job_type="",
                 domain_tags=[],
-                description=description,
-                apply_url=url,
-                posted_date=posted,
+                description=str(description),
+                apply_url=str(url),
+                posted_date=str(posted),
             )
-            return job
         except Exception as e:
             print(f"JSON normalize error: {e}")
             return None
 
-    # ============ ATS Board Scraper ============
-    async def scrape_ats_board(self, src: SourceConfig) -> int:
+    # ============ ATS Board Scraper (Greenhouse etc) ============
+    async def scrape_ats_board(self, src: SourceConfig) -> Tuple[int, int]:
         print(f"[ATS] Fetching {src.name}...")
         content = await self.fetch(src.url)
         if not content:
-            return 0
+            return 0, 0
 
         try:
             data = json.loads(content)
         except json.JSONDecodeError:
-            return 0
+            return 0, 0
 
-        # Greenhouse format
         jobs = data.get("jobs", []) if isinstance(data, dict) else data
+        total = len(jobs)
         count = 0
 
         for job_data in jobs:
             if not isinstance(job_data, dict):
                 continue
 
-            # Filter for security-related roles
-            title = job_data.get("title", "").lower()
-            if not any(kw in title for kw in ["security", "sec ", "infosec", "cyber", "soc", "appsec",
-                                                "pentest", "vulnerab", "threat", "compliance", "grc",
-                                                "crypto", "forens", "incident", "malware", "red team",
-                                                "blue team", "cloud sec", "kubernetes", "aws", "azure"]):
+            title = job_data.get("title", "")
+            if not is_strictly_cyber_job(title):
                 continue
 
-            # Handle location - can be dict or string
             location_data = job_data.get("location")
             if isinstance(location_data, dict):
                 location = location_data.get("name", "Remote")
             else:
                 location = location_data or "Remote"
 
-            # Handle remote - check metadata first, then location
             remote = False
             metadata = job_data.get("metadata")
-            if metadata and isinstance(metadata, list) and len(metadata) > 0:
-                remote_val = metadata[0].get("value", "")
-                remote = remote_val.lower() == "remote"
-            else:
+            if metadata and isinstance(metadata, list):
+                for meta in metadata:
+                    if isinstance(meta, dict) and meta.get("value", "").lower() == "remote":
+                        remote = True
+                        break
+            if not remote:
                 remote = "remote" in location.lower()
 
+            company_name = src.name.replace(" Greenhouse", "").replace(" ATS", "").strip()
+
             job = JobEntry(
-                id=f"ats_{src.name}_{job_data.get('id', hash(job_data.get('title','')))}",
+                id=f"ats_{src.name}_{job_data.get('id', hash(title))}",
                 source=src.name,
                 source_url=src.url,
-                title=job_data.get("title", ""),
-                company=src.name.replace(" Greenhouse", "").replace(" ATS", ""),
+                title=title,
+                company=company_name,
                 location=location,
                 remote=remote,
                 job_type="",
                 domain_tags=[],
-                description=job_data.get("content", job_data.get("description", ""))[:5000],
+                description=str(job_data.get("content", job_data.get("description", "")))[:5000],
                 apply_url=job_data.get("absolute_url", job_data.get("apply_url", "")),
                 posted_date=job_data.get("updated_at", job_data.get("created_at", "")),
             )
+
             if self.db.insert_job(job, self.keywords):
                 count += 1
 
-        print(f"[ATS] {src.name}: {count} new security jobs")
-        return count
+        print(f"[ATS] {src.name}: {count}/{total} new security jobs")
+        return count, total
 
 
 async def main():
     async with ScraperEngine() as scraper:
         results = await scraper.scrape_all()
         print("\n=== SCRAPING COMPLETE ===")
+        total_new = 0
         for source, count in results.items():
-            print(f"  {source}: {count} new jobs")
-        print(f"\nDatabase stats: {scraper.db.get_stats()}")
+            if count > 0:
+                print(f"  {source}: {count} new jobs")
+            total_new += count
+        print(f"\nTotal new jobs: {total_new}")
+        print(f"Database stats: {scraper.db.get_stats()}")
 
 
 if __name__ == "__main__":

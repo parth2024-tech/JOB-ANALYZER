@@ -1,421 +1,283 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en" data-theme="dark">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CyberSecurity Intel Grid // Tactical Job & Internship Command Hub</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛡️</text></svg>">
-  
-  <!-- Inter & JetBrains Mono Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  
-  <!-- Tailwind CSS CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ["Plus Jakarta Sans", "system-ui", "sans-serif"],
-            mono: ["JetBrains Mono", "monospace"]
-          },
-          colors: {
-            slate: {
-              950: "#070a12",
-              900: "#0b1120",
-              850: "#0f172a",
-              800: "#1e293b",
-              emerald: "#10b981",
-              cyan: "#06b6d4",
-              amber: "#f59e0b"
-            }
-          }
-        }
-      }
-    }
-  </script>
-
-  <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-  <!-- Custom Styles -->
-  <link rel="stylesheet" href="/static/style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CyberSec Intel Grid v3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
 </head>
-<body class="min-h-screen flex flex-col text-slate-200">
+<body>
 
-  <!-- ================= TOP HUD NAV ================= -->
-  <header class="sticky top-0 z-40 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3.5">
-    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
-      
-      <!-- Brand & Status -->
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-sm shadow-cyan-500/20">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="text-sm font-extrabold tracking-wider font-mono text-white">CYBERSECURITY // INTEL GRID</h1>
-            <span class="text-[9px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 px-1.5 py-0.2 rounded uppercase">100% CYBER ONLY</span>
-          </div>
-          <div class="flex items-center gap-2 mt-0.5">
-            <span id="system-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 pulse-emerald"></span>
-            <span id="system-status-text" class="text-[11px] font-mono text-slate-400">System Nominal</span>
-            <span class="text-slate-600 text-[10px]">•</span>
-            <span class="text-[11px] font-mono text-slate-400">Last Synced: <span id="stat-last-sync" class="text-slate-300">Just now</span></span>
-          </div>
-        </div>
-      </div>
+<!-- ===== REAL-TIME TOAST BANNER ===== -->
+<div id="ws-banner" class="ws-banner hidden">
+  <span id="ws-banner-text">🆕 New jobs discovered!</span>
+  <button onclick="refreshJobsFromBanner()" class="btn-banner">Load Now</button>
+  <button onclick="dismissBanner()" class="btn-banner-close">✕</button>
+</div>
 
-      <!-- Quick Action HUD -->
-      <div class="flex items-center flex-wrap gap-2">
-        <!-- Analytics Toggle -->
-        <button id="analytics-toggle" class="btn-cyber px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-mono text-slate-300 hover:text-white hover:border-slate-500 flex items-center gap-1.5 transition-all">
-          <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-          </svg>
-          <span>Analytics</span>
-        </button>
-
-        <!-- Sources Health Toggle -->
-        <button id="sources-toggle" class="btn-cyber px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-mono text-slate-300 hover:text-white hover:border-slate-500 flex items-center gap-1.5 transition-all">
-          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-          </svg>
-          <span>Source Health</span>
-        </button>
-
-        <!-- Saved Bookmarks View -->
-        <button id="view-saved-btn" class="btn-cyber px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-mono text-slate-300 hover:text-white hover:border-slate-500 flex items-center gap-1.5 transition-all">
-          <svg class="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"/>
-          </svg>
-          <span>Saved</span>
-          <span id="saved-count-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40">0</span>
-        </button>
-
-        <!-- Export CSV -->
-        <button id="export-btn" class="btn-cyber px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-mono text-slate-300 hover:text-white hover:border-slate-500 flex items-center gap-1.5 transition-all">
-          <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-          <span>Export CSV</span>
-        </button>
-
-        <!-- Shortcuts Help -->
-        <button onclick="toggleShortcutsModal()" class="btn-cyber px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-700/80 text-xs font-mono text-slate-400 hover:text-white transition-all" title="Keyboard Shortcuts (?)">
-          <kbd class="font-bold font-mono">?</kbd>
-        </button>
-
-        <!-- Trigger Scrape Button -->
-        <button id="scrape-btn" class="btn-cyber px-3.5 py-1.5 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs font-mono flex items-center gap-1.5 transition-all shadow-md shadow-cyan-500/20">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-          </svg>
-          <span>Trigger Scrape</span>
-        </button>
-      </div>
-
-    </div>
-  </header>
-
-  <!-- ================= SOURCE HEALTH DRAWER ================= -->
-  <section id="sources-drawer" class="hidden bg-slate-900/90 border-b border-slate-800/80 px-4 lg:px-8 py-5">
-    <div class="max-w-7xl mx-auto space-y-4">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-emerald"></span>
-          <h2 class="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">Feeder Ingestion Engines & ATS Boards Health</h2>
-        </div>
-        <span class="text-[11px] font-mono text-slate-400">All Sources Monitored</span>
-      </div>
-      <div id="sources-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-        <!-- Injected dynamically via app.js -->
-      </div>
-    </div>
-  </section>
-
-  <!-- ================= TELEMETRY & ANALYTICS DRAWER ================= -->
-  <section id="analytics-drawer" class="hidden bg-slate-900/60 border-b border-slate-800/80 px-4 lg:px-8 py-6">
-    <div class="max-w-7xl mx-auto space-y-6">
-      
-      <!-- Metric Cards Grid -->
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <div class="hud-card p-3.5 rounded-xl border border-slate-800">
-          <span class="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Total Cyber Roles</span>
-          <div class="text-2xl font-extrabold text-white mt-1 font-mono" id="stat-total-jobs">0</div>
-          <span class="text-[10px] text-slate-500 mt-0.5 block">Strict Cybersecurity Only</span>
-        </div>
-
-        <div class="hud-card p-3.5 rounded-xl border border-cyan-500/40 bg-cyan-950/10">
-          <span class="text-[10px] font-mono text-cyan-300 uppercase tracking-wider block">🎯 Target Matches</span>
-          <div class="text-2xl font-extrabold text-cyan-400 mt-1 font-mono" id="stat-target-matches">0</div>
-          <span class="text-[10px] text-cyan-500/80 mt-0.5 block">India + Global Remote Interns</span>
-        </div>
-
-        <div class="hud-card p-3.5 rounded-xl border border-emerald-500/40 bg-emerald-950/10">
-          <span class="text-[10px] font-mono text-emerald-300 uppercase tracking-wider block">🇮🇳 India Cyber Roles</span>
-          <div class="text-2xl font-extrabold text-emerald-400 mt-1 font-mono" id="stat-india-jobs">0</div>
-          <span class="text-[10px] text-emerald-500/80 mt-0.5 block">Office or Work From Home</span>
-        </div>
-
-        <div class="hud-card p-3.5 rounded-xl border border-purple-500/40 bg-purple-950/10">
-          <span class="text-[10px] font-mono text-purple-300 uppercase tracking-wider block">💻 Global Online Interns</span>
-          <div class="text-2xl font-extrabold text-purple-400 mt-1 font-mono" id="stat-global-remote-interns">0</div>
-          <span class="text-[10px] text-purple-500/80 mt-0.5 block">Strict Online Internships</span>
-        </div>
-
-        <div class="hud-card p-3.5 rounded-xl border border-amber-500/30 bg-amber-950/10">
-          <span class="text-[10px] font-mono text-amber-400 uppercase tracking-wider block">Cyber Internships</span>
-          <div class="text-2xl font-extrabold text-amber-400 mt-1 font-mono" id="stat-internships">0</div>
-          <span class="text-[10px] text-amber-500/70 mt-0.5 block">Security entry-level/intern</span>
-        </div>
-      </div>
-
-      <!-- Analytics Charts -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div class="hud-card p-5 rounded-xl border border-slate-800 flex flex-col items-center">
-          <h3 class="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider self-start mb-2">Role Type Distribution</h3>
-          <div class="w-full h-48 relative">
-            <canvas id="chart-job-types"></canvas>
-          </div>
-        </div>
-
-        <div class="hud-card p-5 rounded-xl border border-slate-800 flex flex-col items-center">
-          <h3 class="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider self-start mb-2">Top Security Domains</h3>
-          <div class="w-full h-48 relative">
-            <canvas id="chart-domains"></canvas>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </section>
-
-  <!-- ================= MAIN DASHBOARD BODY ================= -->
-  <main class="max-w-7xl mx-auto px-4 lg:px-8 py-6 w-full flex-grow space-y-6">
-
-    <!-- COMMAND & FILTER CONSOLE -->
-    <div class="hud-card rounded-2xl p-5 border border-slate-800 space-y-4">
-      
-      <!-- Top Row: Search Input -->
-      <div class="relative">
-        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
-          <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-          </svg>
-        </div>
-        <input 
-          type="text" 
-          id="search-input"
-          placeholder="Search cybersecurity roles, companies, skills (e.g. SOC Analyst, Pentest, AppSec, CrowdStrike, AWS, Intern)..."
-          class="w-full pl-10 pr-24 py-3 bg-slate-900/90 border border-slate-700/80 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-sans transition-all"
-        />
-        <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center gap-2">
-          <button id="clear-search" class="hidden text-slate-400 hover:text-white p-1">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
-          <kbd class="hidden sm:inline-block px-2 py-0.5 text-[10px] font-mono text-slate-400 bg-slate-800 border border-slate-700 rounded">
-            /
-          </kbd>
-        </div>
-      </div>
-
-      <!-- Geographic Scope Target Criteria Bar -->
-      <div class="flex flex-wrap items-center justify-between gap-3 p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80 text-xs font-mono">
-        <div class="flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-          <span class="text-slate-400 uppercase tracking-wider text-[11px] font-bold">Target Scope:</span>
-          <span class="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">100% CyberSec Verified</span>
-        </div>
-        <div id="location-scope-tabs" class="flex flex-wrap items-center gap-1.5">
-          <button onclick="setLocationScope(target)" data-scope="target" class="px-3 py-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-500/60 font-bold flex items-center gap-1.5 transition-all shadow-sm">
-            <span>🎯</span> Target Filter (India Cyber Office/WFH + Global Online Cyber Interns)
-            <span id="target-count-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-cyan-500/30 text-cyan-200">...</span>
-          </button>
-          <button onclick="setLocationScope(all)" data-scope="all" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent transition-all">
-            🌐 All Global Cyber Roles
-          </button>
-          <button onclick="setLocationScope(india)" data-scope="india" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent transition-all flex items-center gap-1">
-            <span>🇮🇳</span> India (Office/WFH)
-            <span id="india-count-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-400">...</span>
-          </button>
-          <button onclick="setLocationScope(global_remote_intern)" data-scope="global_remote_intern" class="px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-transparent transition-all flex items-center gap-1">
-            <span>💻</span> Global Online Interns
-            <span id="global-intern-count-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-800 text-slate-400">...</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Second Row: Type Tabs & Controls -->
-      <div class="flex flex-wrap items-center justify-between gap-4 pt-1">
-        
-        <!-- Job Type Tabs -->
-        <div id="type-tabs" class="flex items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
-          <button onclick="setJobType(all)" data-type="all" class="px-4 py-2 text-xs font-semibold rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/50 shadow-sm transition-all font-mono">
-            All Roles
-          </button>
-          <button onclick="setJobType(internship)" data-type="internship" class="px-4 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent transition-all font-mono">
-            🎓 Internships
-          </button>
-          <button onclick="setJobType(full-time)" data-type="full-time" class="px-4 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent transition-all font-mono">
-            💼 Full-Time
-          </button>
-          <button onclick="setJobType(contract)" data-type="contract" class="px-4 py-2 text-xs font-semibold rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800/50 border border-transparent transition-all font-mono">
-            📝 Contract
-          </button>
-        </div>
-
-        <!-- Right Side: Remote Toggle, Layout Switcher & Sort Selector -->
-        <div class="flex items-center flex-wrap gap-4">
-          <!-- Remote Toggle -->
-          <label class="flex items-center gap-2 cursor-pointer select-none text-xs font-mono text-slate-300">
-            <input type="checkbox" id="remote-toggle" class="sr-only peer">
-            <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500 relative"></div>
-            <span>Remote Only</span>
-          </label>
-
-          <!-- View Mode Toggle (Grid / Table) -->
-          <div class="flex items-center bg-slate-900 border border-slate-800 rounded-lg p-0.5 text-xs font-mono">
-            <button id="view-grid-btn" onclick="setViewMode(grid)" class="px-2.5 py-1 rounded bg-slate-800 text-cyan-300 font-bold flex items-center gap-1">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
-              </svg>
-              Grid
-            </button>
-            <button id="view-table-btn" onclick="setViewMode(table)" class="px-2.5 py-1 rounded text-slate-400 hover:text-slate-200 flex items-center gap-1">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
-              </svg>
-              Table
-            </button>
-          </div>
-
-          <!-- Sort Select -->
-          <div class="flex items-center gap-1.5 text-xs font-mono text-slate-400">
-            <span>Sort:</span>
-            <select id="sort-select" class="bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
-              <option value="newest">Newest First</option>
-              <option value="oldest">Oldest First</option>
-              <option value="title">Title (A-Z)</option>
-              <option value="company">Company (A-Z)</option>
-            </select>
-          </div>
-        </div>
-
-      </div>
-
-      <!-- Third Row: Specialization Domain Pills -->
-      <div class="pt-2 border-t border-slate-800/80">
-        <div class="flex items-center gap-2 mb-2">
-          <span class="text-[11px] font-mono uppercase tracking-wider text-slate-400">Security Specializations:</span>
-        </div>
-        <div id="domain-pills" class="flex flex-wrap gap-1.5">
-          <!-- Loaded dynamically -->
-        </div>
-      </div>
-
-    </div>
-
-    <!-- FEED STATUS BAR -->
-    <div class="flex items-center justify-between text-xs font-mono text-slate-400 px-1">
-      <span id="job-count-text">Querying opportunities...</span>
-      <span class="text-slate-500 flex items-center gap-1">
-        <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-        <span>Redundant Multi-Route Application Active</span>
-      </span>
-    </div>
-
-    <!-- JOB CARDS GRID VIEW -->
-    <div id="job-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <!-- Injected via app.js -->
-    </div>
-
-    <!-- JOB HIGH-DENSITY TABLE VIEW (Hidden by default) -->
-    <div id="job-table-container" class="hidden hud-card rounded-2xl border border-slate-800 overflow-x-auto">
-      <table class="w-full text-left text-xs font-mono">
-        <thead class="bg-slate-900/90 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-          <tr>
-            <th class="p-3.5">Position & Role</th>
-            <th class="p-3.5">Company</th>
-            <th class="p-3.5">Location / Mode</th>
-            <th class="p-3.5">Domain Tags</th>
-            <th class="p-3.5">Discovered</th>
-            <th class="p-3.5 text-right">Apply Routes</th>
-          </tr>
-        </thead>
-        <tbody id="job-table-body" class="divide-y divide-slate-800/60">
-          <!-- Injected via app.js -->
-        </tbody>
-      </table>
-    </div>
-
-    <!-- PAGINATION DECK -->
-    <div id="pagination" class="flex items-center justify-center gap-3 pt-6 pb-12">
-      <!-- Injected via app.js -->
-    </div>
-
-  </main>
-
-  <!-- ================= JOB DETAIL & REDUNDANT APPLICATION MODAL ================= -->
-  <div id="job-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 drawer-backdrop hidden">
-    <div class="hud-card bg-slate-950/98 border border-cyan-500/40 w-full max-w-3xl max-h-[92vh] rounded-2xl p-6 shadow-2xl modal-enter flex flex-col justify-between overflow-hidden" id="modal-content">
-      <!-- Injected dynamically via app.js -->
+<!-- ===== HEADER ===== -->
+<header class="app-header">
+  <div class="header-brand">
+    <div class="logo-icon">🛡️</div>
+    <div>
+      <h1 class="brand-title">CyberSec Intel Grid</h1>
+      <p class="brand-sub">Live Cybersecurity Opportunity Feed</p>
     </div>
   </div>
+  <div class="header-controls">
+    <div class="search-wrapper">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="search-input" placeholder="Search roles, companies, skills..." class="search-input" autocomplete="off" />
+      <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
+    </div>
+    <div class="view-switcher">
+      <button id="view-grid-btn" class="view-btn active" onclick="setViewMode('grid')" title="Grid View (G)">▦</button>
+      <button id="view-table-btn" class="view-btn" onclick="setViewMode('table')" title="Table View (T)">☷</button>
+    </div>
+    <button id="theme-toggle" class="icon-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌙</button>
+    <button class="icon-btn" onclick="toggleSourcesDrawer()" title="Source Health">📡</button>
+    <button class="icon-btn" onclick="toggleShortcutsModal()" title="Keyboard Shortcuts (?)">⌨️</button>
+  </div>
+</header>
 
-  <!-- ================= KEYBOARD SHORTCUTS MODAL ================= -->
-  <div id="shortcuts-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 drawer-backdrop hidden">
-    <div class="hud-card bg-slate-950/95 border border-slate-700 w-full max-w-md rounded-2xl p-6 shadow-2xl modal-enter space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div class="flex items-center gap-2">
-          <span class="text-cyan-400 font-mono text-sm">⌨️</span>
-          <h3 class="text-sm font-bold font-mono text-white uppercase">Keyboard Shortcuts</h3>
-        </div>
-        <button onclick="toggleShortcutsModal()" class="text-slate-400 hover:text-white text-xs font-mono">✕ Close</button>
+<!-- ===== KPI BAR ===== -->
+<div class="kpi-bar">
+  <div class="kpi-card">
+    <span class="kpi-val" id="kpi-total">—</span>
+    <span class="kpi-label">Total Jobs</span>
+  </div>
+  <div class="kpi-card target">
+    <span class="kpi-val" id="kpi-target">—</span>
+    <span class="kpi-label">Target Matches</span>
+  </div>
+  <div class="kpi-card india">
+    <span class="kpi-val" id="kpi-india">—</span>
+    <span class="kpi-label">🇮🇳 India</span>
+  </div>
+  <div class="kpi-card globe">
+    <span class="kpi-val" id="kpi-globe">—</span>
+    <span class="kpi-label">🌐 Online Interns</span>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-val" id="kpi-remote">—</span>
+    <span class="kpi-label">Remote %</span>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-val" id="kpi-applied">—</span>
+    <span class="kpi-label">Applied</span>
+  </div>
+</div>
+
+<!-- ===== FILTER BAR ===== -->
+<div class="filter-bar">
+  <div class="filter-row">
+    <!-- Location Scope -->
+    <div class="filter-group">
+      <label class="filter-label">Scope</label>
+      <div class="tab-pills" id="scope-tabs">
+        <button class="pill active" data-val="all" onclick="setFilter('location_scope', 'all', this, 'scope-tabs')">All</button>
+        <button class="pill target-pill" data-val="target" onclick="setFilter('location_scope', 'target', this, 'scope-tabs')">🎯 Target</button>
+        <button class="pill" data-val="india" onclick="setFilter('location_scope', 'india', this, 'scope-tabs')">🇮🇳 India</button>
+        <button class="pill" data-val="global_remote_intern" onclick="setFilter('location_scope', 'global_remote_intern', this, 'scope-tabs')">🌐 Remote Intern</button>
       </div>
-      <div class="space-y-2.5 text-xs font-mono text-slate-300">
-        <div class="flex items-center justify-between py-1 border-b border-slate-850">
-          <span>Focus Search</span>
-          <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-cyan-300 font-bold">/</kbd>
-        </div>
-        <div class="flex items-center justify-between py-1 border-b border-slate-850">
-          <span>Toggle Target / All Scope</span>
-          <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-cyan-300 font-bold">1</kbd>
-        </div>
-        <div class="flex items-center justify-between py-1 border-b border-slate-850">
-          <span>Switch to Grid View</span>
-          <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-cyan-300 font-bold">G</kbd>
-        </div>
-        <div class="flex items-center justify-between py-1 border-b border-slate-850">
-          <span>Switch to Table View</span>
-          <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-cyan-300 font-bold">T</kbd>
-        </div>
-        <div class="flex items-center justify-between py-1 border-b border-slate-850">
-          <span>Clear Filters / Close Modals</span>
-          <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-cyan-300 font-bold">Esc</kbd>
-        </div>
-        <div class="flex items-center justify-between py-1">
-          <span>Show This Help Dialog</span>
-          <kbd class="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-cyan-300 font-bold">?</kbd>
-        </div>
+    </div>
+
+    <!-- Job Type -->
+    <div class="filter-group">
+      <label class="filter-label">Type</label>
+      <div class="tab-pills" id="type-tabs">
+        <button class="pill active" data-val="" onclick="setFilter('type', '', this, 'type-tabs')">All</button>
+        <button class="pill" data-val="full-time" onclick="setFilter('type', 'full-time', this, 'type-tabs')">Full-Time</button>
+        <button class="pill" data-val="internship" onclick="setFilter('type', 'internship', this, 'type-tabs')">Internship</button>
+        <button class="pill" data-val="contract" onclick="setFilter('type', 'contract', this, 'type-tabs')">Contract</button>
+      </div>
+    </div>
+
+    <!-- Seniority -->
+    <div class="filter-group">
+      <label class="filter-label">Level</label>
+      <div class="tab-pills" id="seniority-tabs">
+        <button class="pill active" data-val="" onclick="setFilter('seniority', '', this, 'seniority-tabs')">All</button>
+        <button class="pill" data-val="junior" onclick="setFilter('seniority', 'junior', this, 'seniority-tabs')">🟢 Junior</button>
+        <button class="pill" data-val="mid" onclick="setFilter('seniority', 'mid', this, 'seniority-tabs')">🔵 Mid</button>
+        <button class="pill" data-val="senior" onclick="setFilter('seniority', 'senior', this, 'seniority-tabs')">🟡 Senior</button>
+        <button class="pill" data-val="lead" onclick="setFilter('seniority', 'lead', this, 'seniority-tabs')">🟠 Lead</button>
+        <button class="pill" data-val="manager" onclick="setFilter('seniority', 'manager', this, 'seniority-tabs')">🔴 Manager</button>
       </div>
     </div>
   </div>
 
-  <!-- ================= FLOATING TOAST ================= -->
-  <div id="toast" class="fixed bottom-6 right-6 z-50 hud-card bg-slate-900/95 border border-cyan-500/50 px-4 py-3 rounded-xl shadow-xl flex items-center gap-2.5 text-xs font-mono text-slate-200 hidden">
-    <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-    <span id="toast-message">Notification</span>
+  <div class="filter-row filter-row-2">
+    <!-- Domain Tag Filter -->
+    <div class="filter-group">
+      <label class="filter-label">Domain</label>
+      <select id="domain-select" class="filter-select" onchange="applyFilters()">
+        <option value="">All Domains</option>
+      </select>
+    </div>
+
+    <!-- Source Filter -->
+    <div class="filter-group">
+      <label class="filter-label">Source</label>
+      <select id="source-select" class="filter-select" onchange="applyFilters()">
+        <option value="">All Sources</option>
+      </select>
+    </div>
+
+    <!-- Sort -->
+    <div class="filter-group">
+      <label class="filter-label">Sort</label>
+      <select id="sort-select" class="filter-select" onchange="applyFilters()">
+        <option value="newest">Newest First</option>
+        <option value="oldest">Oldest First</option>
+        <option value="title">Title A-Z</option>
+        <option value="company">Company A-Z</option>
+      </select>
+    </div>
+
+    <!-- Remote Toggle -->
+    <div class="filter-group">
+      <label class="filter-label">Remote</label>
+      <button id="remote-toggle" class="filter-select remote-btn" onclick="toggleRemoteFilter()">Any</button>
+    </div>
+
+    <!-- Actions -->
+    <div class="filter-group filter-actions">
+      <button class="btn-action btn-primary" onclick="triggerScrape()">⚡ Scrape Now</button>
+      <button class="btn-action" onclick="exportCSV()">⬇️ Export CSV</button>
+      <button class="btn-action" onclick="showAppliedJobs()">📋 Applied</button>
+      <button class="btn-action" onclick="clearFilters()">✕ Clear</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main class="main-content">
+  <!-- Analytics Charts Row -->
+  <div class="analytics-row" id="analytics-row">
+    <div class="chart-card">
+      <h3 class="chart-title">Jobs by Type</h3>
+      <canvas id="chart-type" height="180"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3 class="chart-title">Top Domains</h3>
+      <canvas id="chart-domain" height="180"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3 class="chart-title">Discovery Timeline (30d)</h3>
+      <canvas id="chart-timeline" height="180"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3 class="chart-title">By Seniority Level</h3>
+      <canvas id="chart-seniority" height="180"></canvas>
+    </div>
   </div>
 
-  <!-- App Controller -->
-  <script src="/static/app.js"></script>
+  <!-- Results Header -->
+  <div class="results-header">
+    <span id="results-count" class="results-count">Loading...</span>
+    <div class="pagination-controls">
+      <button class="page-btn" id="prev-btn" onclick="changePage(-1)" disabled>◀ Prev</button>
+      <span id="page-info" class="page-info">Page 1</span>
+      <button class="page-btn" id="next-btn" onclick="changePage(1)">Next ▶</button>
+    </div>
+  </div>
+
+  <!-- Grid View -->
+  <div id="job-grid" class="job-grid"></div>
+
+  <!-- Table View -->
+  <div id="job-table-container" class="job-table-container hidden">
+    <table class="job-table">
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Company</th>
+          <th>Location</th>
+          <th>Type</th>
+          <th>Level</th>
+          <th>Domain Tags</th>
+          <th>Apply</th>
+          <th>Applied?</th>
+        </tr>
+      </thead>
+      <tbody id="job-table-body"></tbody>
+    </table>
+  </div>
+
+  <!-- Bottom Pagination -->
+  <div class="pagination-bottom">
+    <button class="page-btn" id="prev-btn-b" onclick="changePage(-1)" disabled>◀ Prev</button>
+    <span id="page-info-b" class="page-info">Page 1</span>
+    <button class="page-btn" id="next-btn-b" onclick="changePage(1)">Next ▶</button>
+  </div>
+</main>
+
+<!-- ===== APPLIED JOBS PANEL ===== -->
+<div id="applied-overlay" class="drawer-backdrop hidden" onclick="hideAppliedJobs()"></div>
+<div id="applied-panel" class="side-panel hidden">
+  <div class="panel-header">
+    <h3>📋 Applied Jobs</h3>
+    <button onclick="hideAppliedJobs()" class="close-btn">✕</button>
+  </div>
+  <div id="applied-list" class="panel-body">Loading...</div>
+</div>
+
+<!-- ===== SOURCES DRAWER ===== -->
+<div id="sources-overlay" class="drawer-backdrop hidden" onclick="toggleSourcesDrawer()"></div>
+<div id="sources-drawer" class="side-panel hidden">
+  <div class="panel-header">
+    <h3>📡 Source Health</h3>
+    <button onclick="toggleSourcesDrawer()" class="close-btn">✕</button>
+  </div>
+  <div id="sources-content" class="panel-body">Loading...</div>
+  <div class="panel-section">
+    <h4>🕐 Scrape History</h4>
+    <div id="scrape-history-list" class="scrape-history">Loading...</div>
+  </div>
+</div>
+
+<!-- ===== KEYBOARD SHORTCUTS MODAL ===== -->
+<div id="shortcuts-modal" class="modal-overlay hidden" onclick="if(event.target===this)toggleShortcutsModal()">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3>⌨️ Keyboard Shortcuts</h3>
+      <button onclick="toggleShortcutsModal()" class="close-btn">✕</button>
+    </div>
+    <div class="shortcuts-grid">
+      <span class="kbd">/</span><span>Focus search</span>
+      <span class="kbd">Esc</span><span>Clear search / close modals</span>
+      <span class="kbd">G</span><span>Switch to Grid view</span>
+      <span class="kbd">T</span><span>Switch to Table view</span>
+      <span class="kbd">1</span><span>Toggle Target Only filter</span>
+      <span class="kbd">D</span><span>Toggle Dark / Light mode</span>
+      <span class="kbd">?</span><span>Show this modal</span>
+      <span class="kbd">←/→</span><span>Previous / Next page</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== JOB DETAIL MODAL ===== -->
+<div id="job-modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closeJobModal()">
+  <div class="modal-card modal-wide" id="job-modal">
+    <div class="modal-header">
+      <div>
+        <h2 id="modal-title">Job Title</h2>
+        <p id="modal-company" class="modal-company"></p>
+      </div>
+      <button onclick="closeJobModal()" class="close-btn">✕</button>
+    </div>
+    <div id="modal-body" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ===== TOAST ===== -->
+<div id="toast" class="toast hidden"></div>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="/static/app.js"></script>
 </body>
 </html>

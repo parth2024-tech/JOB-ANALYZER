@@ -1,11 +1,17 @@
 telegram:
-  bot_token: "" # Will use default or accept env
+  bot_token: "" # Set TELEGRAM_BOT_TOKEN env var or fill here
   chat_id: "1650972026"
 
 sources:
   rss_feeds:
     - name: "WeWorkRemotely Security"
       url: "https://weworkremotely.com/categories/remote-devops-sysadmin-jobs.rss"
+      type: "rss"
+    - name: "ClearanceJobs Security RSS"
+      url: "https://www.clearancejobs.com/jobs.rss?type=cyber-security"
+      type: "rss"
+    - name: "InfoSec Jobs RSS"
+      url: "https://infosec-jobs.com/feed/"
       type: "rss"
 
   github_repos:
@@ -17,9 +23,6 @@ sources:
       type: "markdown_list"
 
   json_apis:
-    - name: "Hacker News Who Is Hiring (Firebase API)"
-      url: "https://hacker-news.firebaseio.com/v0/item/39000000.json"
-      type: "hn_hiring"
     - name: "ArbeitNow Jobs API"
       url: "https://www.arbeitnow.com/api/job-board-api"
       type: "json_api"
@@ -29,29 +32,72 @@ sources:
     - name: "Remotive API"
       url: "https://remotive.com/api/remote-jobs?category=Security"
       type: "json_api"
+    - name: "USAJobs Cybersecurity"
+      url: "https://data.usajobs.gov/api/search?Keyword=cybersecurity&PositionTitle=security&ResultsPerPage=50"
+      type: "json_api"
 
   ats_boards:
-    # Major Cybersecurity companies using Greenhouse (Free public JSON job boards)
-    - name: "Cloudflare Greenhouse"
+    # --- EXISTING ---
+    - name: "Cloudflare"
       url: "https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs"
       type: "ats_json"
-    - name: "Zscaler Greenhouse"
+    - name: "Zscaler"
       url: "https://boards-api.greenhouse.io/v1/boards/zscaler/jobs"
       type: "ats_json"
-    - name: "Huntress Greenhouse"
+    - name: "Huntress"
       url: "https://boards-api.greenhouse.io/v1/boards/huntress/jobs"
       type: "ats_json"
-    - name: "Tenable Greenhouse"
+    - name: "Tenable"
       url: "https://boards-api.greenhouse.io/v1/boards/tenableinc/jobs"
       type: "ats_json"
-    - name: "Corelight Greenhouse"
+    - name: "Corelight"
       url: "https://boards-api.greenhouse.io/v1/boards/corelight/jobs"
       type: "ats_json"
-    - name: "Datadog Greenhouse"
+    - name: "Datadog"
       url: "https://boards-api.greenhouse.io/v1/boards/datadog/jobs"
       type: "ats_json"
-    - name: "Elastic Greenhouse"
+    - name: "Elastic"
       url: "https://boards-api.greenhouse.io/v1/boards/elastic/jobs"
+      type: "ats_json"
+    # --- NEW MAJOR CYBERSEC COMPANIES ---
+    - name: "CrowdStrike"
+      url: "https://boards-api.greenhouse.io/v1/boards/crowdstrike/jobs"
+      type: "ats_json"
+    - name: "SentinelOne"
+      url: "https://boards-api.greenhouse.io/v1/boards/sentinelone/jobs"
+      type: "ats_json"
+    - name: "Palo Alto Networks"
+      url: "https://boards-api.greenhouse.io/v1/boards/paloaltonetworks/jobs"
+      type: "ats_json"
+    - name: "Rapid7"
+      url: "https://boards-api.greenhouse.io/v1/boards/rapid7/jobs"
+      type: "ats_json"
+    - name: "Snyk"
+      url: "https://boards-api.greenhouse.io/v1/boards/snyk/jobs"
+      type: "ats_json"
+    - name: "Lacework"
+      url: "https://boards-api.greenhouse.io/v1/boards/lacework/jobs"
+      type: "ats_json"
+    - name: "Vectra AI"
+      url: "https://boards-api.greenhouse.io/v1/boards/vectraai/jobs"
+      type: "ats_json"
+    - name: "Wiz"
+      url: "https://boards-api.greenhouse.io/v1/boards/wiz-io/jobs"
+      type: "ats_json"
+    - name: "Abnormal Security"
+      url: "https://boards-api.greenhouse.io/v1/boards/abnormalsecurity/jobs"
+      type: "ats_json"
+    - name: "Axonius"
+      url: "https://boards-api.greenhouse.io/v1/boards/axonius/jobs"
+      type: "ats_json"
+    - name: "Orca Security"
+      url: "https://boards-api.greenhouse.io/v1/boards/orcasecurity/jobs"
+      type: "ats_json"
+    - name: "Recorded Future"
+      url: "https://boards-api.greenhouse.io/v1/boards/recordedfuture/jobs"
+      type: "ats_json"
+    - name: "Pentera"
+      url: "https://boards-api.greenhouse.io/v1/boards/pentera/jobs"
       type: "ats_json"
 
 keywords:
@@ -90,6 +136,20 @@ keywords:
     - "internship"
     - "trainee"
     - "co-op"
+    - "edr"
+    - "xdr"
+    - "zero trust"
+    - "devsecops"
+    - "iam"
+    - "identity access"
+    - "dfir"
+    - "reverse engineering"
+    - "cnapp"
+
+# Scheduler settings
+scheduler:
+  interval_hours: 4
+  enabled: true
 
 # User-specific location & role criteria
 preferences:

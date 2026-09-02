@@ -16,6 +16,10 @@ pyyaml>=6.0.1
 # CLI & Scheduling
 click>=8.1.0
 schedule>=1.2.0
+APScheduler>=3.10.0
+
+# Caching & Performance
+cachetools>=5.3.0
 
 # Utilities
 python-dateutil>=2.9.0

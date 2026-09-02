@@ -20,7 +20,7 @@ class JobEntry:
     location: str
     remote: bool
     job_type: str  # "full-time", "internship", "contract", "part-time"
-    domain_tags: List[str]  # e.g., ["offensive", "pentest", "internship"]
+    domain_tags: List[str]
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
     salary_currency: str = "USD"
@@ -29,13 +29,18 @@ class JobEntry:
     posted_date: Optional[str] = None
     discovered_at: str = ""
     hash: str = ""
+    seniority_level: str = ""   # junior / mid / senior / lead / manager
+    skills_required: str = "[]" # JSON list of extracted skills
 
 
 INDIA_LOCATIONS = [
     "india", "bengaluru", "bangalore", "hyderabad", "mumbai", "pune",
     "delhi", "noida", "gurgaon", "gurugram", "chennai", "kolkata",
     "ahmedabad", "jaipur", "kochi", "cochin", "indore", "chandigarh",
-    "trivandrum", "thiruvananthapuram", "bhubaneswar", "coimbatore"
+    "trivandrum", "thiruvananthapuram", "bhubaneswar", "coimbatore",
+    "lucknow", "surat", "nagpur", "patna", "bhopal", "visakhapatnam",
+    "vadodara", "agra", "nashik", "faridabad", "meerut", "rajkot",
+    "kalyan", "vasai", "pimpri", "thane", "navi mumbai"
 ]
 
 CYBER_TITLE_PATTERNS = [
@@ -54,7 +59,7 @@ CYBER_TITLE_PATTERNS = [
     r'\b(incident\s*(response|responder|handler))\b',
     r'\b(forensic|forensics|dfir)\b',
     r'\b(cryptograph\w*)\b',
-    r'\b(identity\s*(\&|and)?\s*access|iam\s*engineer|iam\s*analyst)\b',
+    r'\b(identity\s*(&|and)?\s*access|iam\s*engineer|iam\s*analyst)\b',
     r'\b(grc\s*(analyst|engineer|specialist|consultant)?)\b',
     r'\b(ciso|chief information security officer|iso\s*27001|soc\s*2\s*compliance)\b',
     r'\b(bug bounty|ethical hack\w*)\b',
@@ -80,9 +85,30 @@ NON_CYBER_TITLE_EXCLUSIONS = [
     r'\b(warehouse|driver|koch|gastronomie|hotel)\b'
 ]
 
+SENIORITY_PATTERNS = {
+    "junior":  [r'\b(junior|jr\.?|entry[\s-]level|associate|graduate|new\s*grad|intern|trainee|co[\s-]?op)\b'],
+    "mid":     [r'\b(mid[\s-]level|intermediate|ii|2)\b'],
+    "senior":  [r'\b(senior|sr\.?|iii|3|experienced)\b'],
+    "lead":    [r'\b(lead|principal|staff|tech\s*lead|team\s*lead)\b'],
+    "manager": [r'\b(manager|director|head\s*of|vp\s*of|vice\s*president|ciso|chief)\b']
+}
+
+SKILLS_KEYWORDS = [
+    "python", "go", "golang", "rust", "java", "c\\+\\+", "kubernetes", "docker",
+    "terraform", "aws", "azure", "gcp", "splunk", "elastic", "sigma", "yara",
+    "burp suite", "metasploit", "nessus", "nmap", "wireshark", "ida pro",
+    "ghidra", "radare2", "nuclei", "oscp", "ceh", "cissp", "cism", "cisa",
+    "comptia security\\+", "comptia", "penetration testing", "owasp",
+    "siem", "soar", "edr", "xdr", "threat hunting", "malware analysis",
+    "reverse engineering", "incident response", "forensics", "dfir",
+    "threat intelligence", "vulnerability management", "cloud security",
+    "zero trust", "iam", "oauth", "saml", "active directory", "ldap",
+    "linux", "windows server", "powershell", "bash", "api security",
+    "devsecops", "ci/cd security", "supply chain security"
+]
+
 
 def is_strictly_cyber_job(title: str, description: str = "") -> bool:
-    """Strictly verify if position is cybersecurity-related."""
     if not title:
         return False
     t = title.lower().strip()
@@ -99,55 +125,57 @@ def is_strictly_cyber_job(title: str, description: str = "") -> bool:
 
 
 def is_india_location(location: Optional[str]) -> bool:
-    """Check if location string refers to India or an Indian city (excluding Indiana/Indianapolis)."""
     if not location:
         return False
     loc = location.lower().strip()
-    
     if re.search(r'\b(india|ind)\b', loc):
         if 'indiana' in loc or 'indianapolis' in loc:
             pass
         else:
             return True
-
     for c in INDIA_LOCATIONS:
-        if re.search(rf'\b{c}\b', loc):
+        if re.search(rf'\b{re.escape(c)}\b', loc):
             return True
     return False
 
 
 def is_target_opportunity(location: Optional[str], remote: Any, job_type: Optional[str], title: str = "") -> bool:
-    """
-    User-specific criteria:
-    - Must be strictly a cybersecurity job
-    - Any location in India: accepts either company office (onsite) or work from home (remote)
-    - Outside India: accepts ONLY online/remote internships
-    """
     if title and not is_strictly_cyber_job(title):
         return False
-
     if is_india_location(location):
         return True
-    
-    # Outside India: Must be Remote/Online AND Internship
     loc_str = (location or "").lower()
     is_rem = bool(remote) or ("remote" in loc_str or "anywhere" in loc_str or "online" in loc_str)
     is_intern = (job_type or "").lower() == "internship" or "intern" in (title or "").lower()
     return is_rem and is_intern
 
 
+def detect_seniority(title: str) -> str:
+    t = title.lower()
+    for level, patterns in SENIORITY_PATTERNS.items():
+        for p in patterns:
+            if re.search(p, t):
+                return level
+    return "mid"
+
+
+def extract_skills(description: str) -> List[str]:
+    if not description:
+        return []
+    text = description.lower()
+    found = []
+    for skill in SKILLS_KEYWORDS:
+        if re.search(rf'\b{skill}\b', text) and skill not in found:
+            found.append(skill)
+    return found[:15]
+
+
 def sanitize_apply_url(url: Optional[str], title: str = "", company: str = "") -> str:
-    """Clean and normalize URL, fixing broken hostnames and redundant query params."""
     if not url or not url.strip() or url.strip() == "#":
         q = urllib.parse.quote_plus(f"{company} {title} careers security".strip())
         return f"https://www.google.com/search?q={q}"
-    
     clean_url = url.strip()
-    
-    # Fix known broken/typo domains
     clean_url = clean_url.replace("arbeitnow.co.uk", "arbeitnow.com")
-    
-    # Clean duplicate query parameters (e.g. ?gh_jid=123&gh_jid=123)
     if "?" in clean_url:
         parts = clean_url.split("?", 1)
         base, qs = parts[0], parts[1]
@@ -162,26 +190,16 @@ def sanitize_apply_url(url: Optional[str], title: str = "", company: str = "") -
             clean_url = base + ("?" + urllib.parse.urlencode(unique_params) if unique_params else "")
         except Exception:
             pass
-            
     return clean_url
 
 
 def generate_application_routes(title: str, company: str, apply_url: Optional[str]) -> Dict[str, str]:
-    """
-    Generate guaranteed working redundant application paths for every job:
-    1. Direct ATS / Company URL (Sanitized)
-    2. Google Jobs Direct Query
-    3. LinkedIn Jobs Direct Search
-    4. Company Official Careers Portal Query
-    """
     direct = sanitize_apply_url(apply_url, title, company)
     t_clean = re.sub(r"\(.*?\)", "", title or "").replace("at " + company, "").strip()
     c_clean = company if company and company != "Unknown" else ""
-    
     google_q = urllib.parse.quote_plus(f"{c_clean} {t_clean} careers security".strip())
     linkedin_q = urllib.parse.quote_plus(f"{t_clean} {c_clean}".strip())
     company_q = urllib.parse.quote_plus(f"{c_clean} cybersecurity careers jobs".strip())
-    
     return {
         "direct_url": direct,
         "google_jobs_url": f"https://www.google.com/search?q={google_q}",
@@ -197,6 +215,12 @@ class JobDatabase:
 
     def _init_db(self):
         with self._conn() as conn:
+            # Enable WAL mode for concurrent reads + writes
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
+            conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
+            conn.execute("PRAGMA cache_size=10000")
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS jobs (
                     id TEXT PRIMARY KEY,
@@ -215,25 +239,94 @@ class JobDatabase:
                     apply_url TEXT,
                     posted_date TEXT,
                     discovered_at TEXT NOT NULL,
-                    hash TEXT NOT NULL UNIQUE
+                    hash TEXT NOT NULL UNIQUE,
+                    seniority_level TEXT DEFAULT 'mid',
+                    skills_required TEXT DEFAULT '[]'
                 )
             """)
+
+            # Add new columns to existing table if upgrading
+            for col, coldef in [
+                ("seniority_level", "TEXT DEFAULT 'mid'"),
+                ("skills_required", "TEXT DEFAULT '[]'")
+            ]:
+                try:
+                    conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} {coldef}")
+                except Exception:
+                    pass  # Column already exists
+
+            # Scrape history tracking table
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_hash ON jobs(hash)
+                CREATE TABLE IF NOT EXISTS scrape_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source TEXT NOT NULL,
+                    run_at TEXT NOT NULL,
+                    new_jobs INTEGER DEFAULT 0,
+                    total_fetched INTEGER DEFAULT 0,
+                    status TEXT DEFAULT 'ok',
+                    error TEXT
+                )
+            """)
+
+            # Application tracking table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS applications (
+                    job_id TEXT PRIMARY KEY,
+                    applied_at TEXT NOT NULL,
+                    notes TEXT DEFAULT '',
+                    status TEXT DEFAULT 'applied'
+                )
+            """)
+
+            # Sent alerts dedup table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS sent_alerts (
+                    fingerprint TEXT PRIMARY KEY,
+                    sent_at TEXT NOT NULL
+                )
+            """)
+
+            # Indexes
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_hash ON jobs(hash)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_discovered ON jobs(discovered_at)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_company ON jobs(company)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_job_type ON jobs(job_type)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_seniority ON jobs(seniority_level)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_location_type_remote ON jobs(location, job_type, remote)")
+
+            # FTS5 virtual table for full-text search
+            conn.execute("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS jobs_fts USING fts5(
+                    title, company, description, location,
+                    content=jobs, content_rowid=rowid
+                )
+            """)
+
+            # FTS triggers to keep FTS index in sync
+            conn.execute("""
+                CREATE TRIGGER IF NOT EXISTS jobs_ai AFTER INSERT ON jobs BEGIN
+                    INSERT INTO jobs_fts(rowid, title, company, description, location)
+                    VALUES (new.rowid, new.title, new.company, new.description, new.location);
+                END
             """)
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_discovered ON jobs(discovered_at)
+                CREATE TRIGGER IF NOT EXISTS jobs_ad AFTER DELETE ON jobs BEGIN
+                    INSERT INTO jobs_fts(jobs_fts, rowid, title, company, description, location)
+                    VALUES('delete', old.rowid, old.title, old.company, old.description, old.location);
+                END
             """)
             conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_company ON jobs(company)
-            """)
-            conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_job_type ON jobs(job_type)
+                CREATE TRIGGER IF NOT EXISTS jobs_au AFTER UPDATE ON jobs BEGIN
+                    INSERT INTO jobs_fts(jobs_fts, rowid, title, company, description, location)
+                    VALUES('delete', old.rowid, old.title, old.company, old.description, old.location);
+                    INSERT INTO jobs_fts(rowid, title, company, description, location)
+                    VALUES (new.rowid, new.title, new.company, new.description, new.location);
+                END
             """)
 
     @contextmanager
     def _conn(self):
-        conn = sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path, timeout=10)
         conn.row_factory = sqlite3.Row
         try:
             yield conn
@@ -243,14 +336,12 @@ class JobDatabase:
 
     @staticmethod
     def _generate_hash(job: JobEntry) -> str:
-        """Generate unique hash for deduplication."""
         key = f"{job.title}|{job.company}|{job.location}|{job.apply_url}"
         return hashlib.sha256(key.encode()).hexdigest()[:16]
 
     @staticmethod
     def _classify_job_type(title: str, description: str) -> str:
         text = (title + " " + description).lower()
-        # Use word boundaries to avoid false positives like "intern" in "officer"
         if any(re.search(rf'\b{re.escape(k)}\b', text) for k in ["intern", "trainee", "co-op", "coop", "apprentice"]):
             return "internship"
         if any(re.search(rf'\b{re.escape(k)}\b', text) for k in ["contract", "contractor", "freelance"]):
@@ -262,7 +353,6 @@ class JobDatabase:
     @staticmethod
     def _extract_domain_tags(text: str, keywords: List[str]) -> List[str]:
         text_lower = text.lower()
-        # Use word boundaries for accurate matching
         found = []
         for kw in keywords:
             kw_lower = kw.lower()
@@ -271,16 +361,16 @@ class JobDatabase:
         return found
 
     def insert_job(self, job: JobEntry, keywords: List[str]) -> bool:
-        """Insert job ONLY if it is strictly cybersecurity-related and not duplicate."""
         if not is_strictly_cyber_job(job.title, job.description):
             return False
 
         job.discovered_at = datetime.utcnow().isoformat()
         job.hash = self._generate_hash(job)
         job.job_type = self._classify_job_type(job.title, job.description)
-        job.domain_tags = self._extract_domain_tags(
-            job.title + " " + job.description, keywords
-        )
+        job.domain_tags = self._extract_domain_tags(job.title + " " + job.description, keywords)
+        job.seniority_level = detect_seniority(job.title)
+        skills = extract_skills(job.description)
+        job.skills_required = json.dumps(skills)
 
         with self._conn() as conn:
             try:
@@ -288,18 +378,34 @@ class JobDatabase:
                     INSERT INTO jobs (
                         id, source, source_url, title, company, location, remote,
                         job_type, domain_tags, salary_min, salary_max, salary_currency,
-                        description, apply_url, posted_date, discovered_at, hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        description, apply_url, posted_date, discovered_at, hash,
+                        seniority_level, skills_required
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     job.id, job.source, job.source_url, job.title, job.company,
                     job.location, int(job.remote), job.job_type,
                     json.dumps(job.domain_tags), job.salary_min, job.salary_max,
                     job.salary_currency, job.description, job.apply_url,
-                    job.posted_date, job.discovered_at, job.hash
+                    job.posted_date, job.discovered_at, job.hash,
+                    job.seniority_level, job.skills_required
                 ))
                 return True
             except sqlite3.IntegrityError:
                 return False
+
+    def log_scrape_run(self, source: str, new_jobs: int, total_fetched: int, status: str = "ok", error: str = "") -> None:
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT INTO scrape_runs (source, run_at, new_jobs, total_fetched, status, error)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (source, datetime.utcnow().isoformat(), new_jobs, total_fetched, status, error))
+
+    def get_scrape_history(self, limit: int = 100) -> List[Dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT * FROM scrape_runs ORDER BY run_at DESC LIMIT ?
+            """, (limit,)).fetchall()
+            return [dict(r) for r in rows]
 
     def get_new_jobs(self, since: str, limit: int = 100) -> List[Dict[str, Any]]:
         with self._conn() as conn:
@@ -308,18 +414,15 @@ class JobDatabase:
             """, (since, limit)).fetchall()
             return [dict(row) for row in rows]
 
+    def get_new_jobs_count_since(self, since: str) -> int:
+        with self._conn() as conn:
+            return conn.execute("SELECT COUNT(*) FROM jobs WHERE discovered_at > ?", (since,)).fetchone()[0]
+
     def get_stats(self) -> Dict[str, Any]:
         with self._conn() as conn:
             total = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
-            internships = conn.execute(
-                "SELECT COUNT(*) FROM jobs WHERE job_type = 'internship'"
-            ).fetchone()[0]
-            by_type = conn.execute("""
-                SELECT job_type, COUNT(*) as c FROM jobs GROUP BY job_type
-            """).fetchall()
-            by_domain = conn.execute("""
-                SELECT domain_tags, COUNT(*) as c FROM jobs
-            """).fetchall()
+            internships = conn.execute("SELECT COUNT(*) FROM jobs WHERE job_type = 'internship'").fetchone()[0]
+            by_type = conn.execute("SELECT job_type, COUNT(*) as c FROM jobs GROUP BY job_type").fetchall()
             return {
                 "total": total,
                 "internships": internships,
@@ -336,6 +439,10 @@ class JobDatabase:
                 data["domain_tags"] = json.loads(data.get("domain_tags") or "[]")
             except Exception:
                 data["domain_tags"] = []
+            try:
+                data["skills_required"] = json.loads(data.get("skills_required") or "[]")
+            except Exception:
+                data["skills_required"] = []
 
             loc = data.get("location")
             rem = data.get("remote")
@@ -350,10 +457,13 @@ class JobDatabase:
             data["target_badge"] = "🇮🇳 India • Office / WFH" if is_ind else ("🌐 Global • Online Internship" if is_tgt else None)
             data["application_routes"] = generate_application_routes(tit, comp, data.get("apply_url"))
             data["apply_url"] = data["application_routes"]["direct_url"]
+
+            # Check if applied
+            applied_row = conn.execute("SELECT * FROM applications WHERE job_id = ?", (job_id,)).fetchone()
+            data["applied"] = dict(applied_row) if applied_row else None
             return data
 
     def get_sources_stats(self) -> List[Dict[str, Any]]:
-        """Get live ingestion metrics per feeder source."""
         with self._conn() as conn:
             rows = conn.execute("""
                 SELECT source, COUNT(*) as count, MAX(discovered_at) as last_seen
@@ -371,6 +481,85 @@ class JobDatabase:
                 for r in rows
             ]
 
+    def get_search_suggestions(self, q: str, limit: int = 10) -> Dict[str, List[str]]:
+        q_pattern = f"%{q}%"
+        with self._conn() as conn:
+            title_rows = conn.execute(
+                "SELECT DISTINCT title FROM jobs WHERE title LIKE ? LIMIT ?", (q_pattern, limit)
+            ).fetchall()
+            company_rows = conn.execute(
+                "SELECT DISTINCT company FROM jobs WHERE company LIKE ? LIMIT ?", (q_pattern, limit)
+            ).fetchall()
+            return {
+                "titles": [r[0] for r in title_rows],
+                "companies": [r[0] for r in company_rows]
+            }
+
+    def mark_applied(self, job_id: str, notes: str = "") -> bool:
+        with self._conn() as conn:
+            try:
+                conn.execute("""
+                    INSERT OR REPLACE INTO applications (job_id, applied_at, notes, status)
+                    VALUES (?, ?, ?, 'applied')
+                """, (job_id, datetime.utcnow().isoformat(), notes))
+                return True
+            except Exception:
+                return False
+
+    def unmark_applied(self, job_id: str) -> bool:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM applications WHERE job_id = ?", (job_id,))
+            return True
+
+    def get_applications(self) -> List[Dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT j.*, a.applied_at, a.notes, a.status as app_status
+                FROM applications a
+                JOIN jobs j ON j.id = a.job_id
+                ORDER BY a.applied_at DESC
+            """).fetchall()
+            items = []
+            for row in rows:
+                item = dict(row)
+                try:
+                    item["domain_tags"] = json.loads(item.get("domain_tags") or "[]")
+                except Exception:
+                    item["domain_tags"] = []
+                try:
+                    item["skills_required"] = json.loads(item.get("skills_required") or "[]")
+                except Exception:
+                    item["skills_required"] = []
+                item["application_routes"] = generate_application_routes(
+                    item.get("title", ""), item.get("company", ""), item.get("apply_url")
+                )
+                items.append(item)
+            return items
+
+    def is_alert_sent(self, fingerprint: str) -> bool:
+        with self._conn() as conn:
+            row = conn.execute("SELECT 1 FROM sent_alerts WHERE fingerprint = ?", (fingerprint,)).fetchone()
+            return row is not None
+
+    def mark_alert_sent(self, fingerprint: str) -> None:
+        with self._conn() as conn:
+            conn.execute("""
+                INSERT OR IGNORE INTO sent_alerts (fingerprint, sent_at)
+                VALUES (?, ?)
+            """, (fingerprint, datetime.utcnow().isoformat()))
+
+    def get_jobs_history_by_day(self, days: int = 30) -> List[Dict[str, Any]]:
+        """Get job discovery counts grouped by day for the timeline chart."""
+        with self._conn() as conn:
+            rows = conn.execute("""
+                SELECT DATE(discovered_at) as day, COUNT(*) as count
+                FROM jobs
+                WHERE discovered_at >= DATE('now', ?)
+                GROUP BY DATE(discovered_at)
+                ORDER BY day ASC
+            """, (f'-{days} days',)).fetchall()
+            return [{"day": r["day"], "count": r["count"]} for r in rows]
+
     def get_jobs_filtered(
         self,
         search: str = "",
@@ -378,24 +567,29 @@ class JobDatabase:
         domain: str = "",
         remote: Optional[bool] = None,
         source: str = "",
+        seniority: str = "",
         sort_by: str = "newest",
-        location_scope: str = "all",  # "all", "target", "india", "global_remote_intern"
+        location_scope: str = "all",
         target_only: bool = False,
         page: int = 1,
         page_size: int = 24
     ) -> Dict[str, Any]:
-        """Fetch paginated, filtered, and sorted jobs with total match count."""
         conditions = []
         params = []
 
         if search:
-            search_pattern = f"%{search.strip()}%"
+            # Try FTS5 first (fast), fallback to LIKE
             conditions.append("(title LIKE ? OR company LIKE ? OR location LIKE ? OR description LIKE ?)")
+            search_pattern = f"%{search.strip()}%"
             params.extend([search_pattern, search_pattern, search_pattern, search_pattern])
 
         if job_type and job_type != "all":
             conditions.append("job_type = ?")
             params.append(job_type)
+
+        if seniority and seniority != "all":
+            conditions.append("seniority_level = ?")
+            params.append(seniority)
 
         if domain and domain != "all":
             conditions.append("domain_tags LIKE ?")
@@ -409,9 +603,6 @@ class JobDatabase:
             conditions.append("source = ?")
             params.append(source)
 
-        # Location scope and target criteria filtering:
-        # India: accepts any location (Office or WFH)
-        # Outside India: accepts ONLY online/remote internships
         india_sql_conditions = " OR ".join([f"location LIKE '%{k}%'" for k in INDIA_LOCATIONS])
         india_sql = f"(({india_sql_conditions}) AND location NOT LIKE '%Indiana%' AND location NOT LIKE '%Indianapolis%')"
         remote_intern_sql = "((job_type = 'internship' OR title LIKE '%intern%') AND (remote = 1 OR location LIKE '%Remote%' OR location LIKE '%Online%'))"
@@ -425,7 +616,6 @@ class JobDatabase:
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
-        # Order by mapping
         sort_map = {
             "newest": "discovered_at DESC, id DESC",
             "oldest": "discovered_at ASC, id ASC",
@@ -433,25 +623,27 @@ class JobDatabase:
             "company": "company ASC"
         }
         order_clause = f"ORDER BY {sort_map.get(sort_by, 'discovered_at DESC, id DESC')}"
-
         offset = max(0, (page - 1) * page_size)
 
         with self._conn() as conn:
             total = conn.execute(f"SELECT COUNT(*) FROM jobs {where_clause}", tuple(params)).fetchone()[0]
-
             query = f"SELECT * FROM jobs {where_clause} {order_clause} LIMIT ? OFFSET ?"
-            query_params = list(params) + [page_size, offset]
-            rows = conn.execute(query, tuple(query_params)).fetchall()
+            rows = conn.execute(query, tuple(params) + (page_size, offset)).fetchall()
 
             items = []
+            applied_ids = {r[0] for r in conn.execute("SELECT job_id FROM applications").fetchall()}
+
             for row in rows:
                 item = dict(row)
                 try:
                     item["domain_tags"] = json.loads(item.get("domain_tags") or "[]")
                 except Exception:
                     item["domain_tags"] = []
+                try:
+                    item["skills_required"] = json.loads(item.get("skills_required") or "[]")
+                except Exception:
+                    item["skills_required"] = []
 
-                # Tag opportunity for user criteria
                 loc = item.get("location")
                 rem = item.get("remote")
                 jt = item.get("job_type")
@@ -462,20 +654,13 @@ class JobDatabase:
 
                 item["is_india"] = is_ind
                 item["is_target_match"] = is_tgt
-                if is_ind:
-                    item["target_badge"] = "🇮🇳 India • Office / WFH"
-                elif is_tgt:
-                    item["target_badge"] = "🌐 Global • Online Internship"
-                else:
-                    item["target_badge"] = None
-
+                item["target_badge"] = "🇮🇳 India • Office / WFH" if is_ind else ("🌐 Global • Online Internship" if is_tgt else None)
                 item["application_routes"] = generate_application_routes(tit, comp, item.get("apply_url"))
                 item["apply_url"] = item["application_routes"]["direct_url"]
-
+                item["applied"] = item["id"] in applied_ids
                 items.append(item)
 
             total_pages = (total + page_size - 1) // page_size if total > 0 else 1
-
             return {
                 "items": items,
                 "total": total,
@@ -485,7 +670,6 @@ class JobDatabase:
             }
 
     def get_detailed_stats(self) -> Dict[str, Any]:
-        """Compute live telemetry for the web dashboard."""
         with self._conn() as conn:
             total = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
             if total == 0:
@@ -493,18 +677,13 @@ class JobDatabase:
                     "total": 0, "internships": 0, "remote": 0, "remote_pct": 0,
                     "target_count": 0, "india_count": 0, "global_remote_intern_count": 0,
                     "by_type": {}, "by_source": {}, "top_companies": [],
-                    "top_domains": {}, "last_scraped": None
+                    "top_domains": {}, "last_scraped": None,
+                    "by_seniority": {}, "applied_count": 0
                 }
 
-            internships = conn.execute(
-                "SELECT COUNT(*) FROM jobs WHERE job_type = 'internship'"
-            ).fetchone()[0]
+            internships = conn.execute("SELECT COUNT(*) FROM jobs WHERE job_type = 'internship'").fetchone()[0]
+            remote_count = conn.execute("SELECT COUNT(*) FROM jobs WHERE remote = 1").fetchone()[0]
 
-            remote_count = conn.execute(
-                "SELECT COUNT(*) FROM jobs WHERE remote = 1"
-            ).fetchone()[0]
-
-            # Calculate user-specific target counts
             india_sql_conditions = " OR ".join([f"location LIKE '%{k}%'" for k in INDIA_LOCATIONS])
             india_sql = f"(({india_sql_conditions}) AND location NOT LIKE '%Indiana%' AND location NOT LIKE '%Indianapolis%')"
             remote_intern_sql = "((job_type = 'internship' OR title LIKE '%intern%') AND (remote = 1 OR location LIKE '%Remote%' OR location LIKE '%Online%'))"
@@ -513,31 +692,29 @@ class JobDatabase:
             global_remote_intern_count = conn.execute(
                 f"SELECT COUNT(*) FROM jobs WHERE NOT {india_sql} AND {remote_intern_sql}"
             ).fetchone()[0]
-            target_count = conn.execute(
-                f"SELECT COUNT(*) FROM jobs WHERE {india_sql} OR {remote_intern_sql}"
-            ).fetchone()[0]
+            target_count = conn.execute(f"SELECT COUNT(*) FROM jobs WHERE {india_sql} OR {remote_intern_sql}").fetchone()[0]
 
-            by_type_rows = conn.execute(
+            by_type = {r["job_type"]: r["c"] for r in conn.execute(
                 "SELECT job_type, COUNT(*) as c FROM jobs GROUP BY job_type ORDER BY c DESC"
-            ).fetchall()
-            by_type = {r["job_type"]: r["c"] for r in by_type_rows}
+            ).fetchall()}
 
-            by_source_rows = conn.execute(
+            by_seniority = {r["seniority_level"]: r["c"] for r in conn.execute(
+                "SELECT seniority_level, COUNT(*) as c FROM jobs GROUP BY seniority_level ORDER BY c DESC"
+            ).fetchall()}
+
+            by_source = {r["source"]: r["c"] for r in conn.execute(
                 "SELECT source, COUNT(*) as c FROM jobs GROUP BY source ORDER BY c DESC LIMIT 10"
-            ).fetchall()
-            by_source = {r["source"]: r["c"] for r in by_source_rows}
+            ).fetchall()}
 
-            top_companies_rows = conn.execute(
+            top_companies = [{"company": r["company"], "count": r["c"]} for r in conn.execute(
                 "SELECT company, COUNT(*) as c FROM jobs WHERE company != 'Unknown' GROUP BY company ORDER BY c DESC LIMIT 10"
-            ).fetchall()
-            top_companies = [{"company": r["company"], "count": r["c"]} for r in top_companies_rows]
+            ).fetchall()]
 
-            last_row = conn.execute(
-                "SELECT discovered_at FROM jobs ORDER BY discovered_at DESC LIMIT 1"
-            ).fetchone()
+            last_row = conn.execute("SELECT discovered_at FROM jobs ORDER BY discovered_at DESC LIMIT 1").fetchone()
             last_scraped = last_row[0] if last_row else None
 
-            # Aggregate domain counts
+            applied_count = conn.execute("SELECT COUNT(*) FROM applications").fetchone()[0]
+
             domain_counts = self.get_domain_counts()
             top_domains = {d["tag"]: d["count"] for d in domain_counts[:8]}
 
@@ -550,14 +727,15 @@ class JobDatabase:
                 "india_count": india_count,
                 "global_remote_intern_count": global_remote_intern_count,
                 "by_type": by_type,
+                "by_seniority": by_seniority,
                 "by_source": by_source,
                 "top_companies": top_companies,
                 "top_domains": top_domains,
-                "last_scraped": last_scraped
+                "last_scraped": last_scraped,
+                "applied_count": applied_count
             }
 
     def get_domain_counts(self) -> List[Dict[str, Any]]:
-        """Extract and aggregate frequencies of all domain tags."""
         tag_counts = {}
         with self._conn() as conn:
             rows = conn.execute("SELECT domain_tags FROM jobs WHERE domain_tags IS NOT NULL AND domain_tags != '[]'").fetchall()
@@ -569,12 +747,15 @@ class JobDatabase:
                             tag_counts[t] = tag_counts.get(t, 0) + 1
                 except Exception:
                     continue
-
         sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
         return [{"tag": k, "count": v} for k, v in sorted_tags]
 
+    def vacuum(self) -> None:
+        with self._conn() as conn:
+            conn.execute("PRAGMA incremental_vacuum")
+
     def close(self):
-        pass  # Connections are per-operation
+        pass
 
 
 if __name__ == "__main__":
