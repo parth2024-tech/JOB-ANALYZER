@@ -1,0 +1,32 @@
+{
+  "name": "cybersec-job-scraper",
+  "version": "1.0.0",
+  "description": "Multi-source cybersecurity job & internship scraper, deduplicator, and live tactical dashboard.",
+  "tech_stack": [
+    "Python 3.12+",
+    "SQLite 3",
+    "aiohttp / aiohttp.web",
+    "BeautifulSoup4",
+    "Tailwind CSS",
+    "Vanilla Modern JS (ES6+)",
+    "Chart.js & Lucide Icons"
+  ],
+  "conventions": [
+    "Use async/await for network and I/O operations",
+    "Keep database queries parameterized to prevent SQL injection",
+    "Use responsive, high-craft cybersecurity HUD design with dark mode",
+    "Handle all API errors with graceful JSON responses",
+    "Provide clear CLI and script commands in run.sh"
+  ],
+  "architecture_patterns": [
+    "Asynchronous scraper engine with modular source adapters",
+    "SQLite persistence with SHA-256 fingerprint deduplication",
+    "Lightweight REST API backend coupled with interactive single-page dashboard",
+    "Telegram notification integration"
+  ],
+  "never_do": [
+    "Never run blocking synchronous requests in the async event loop",
+    "Never store plaintext credentials in code (use config.yaml or env vars)",
+    "Never hardcode static job counts — always compute live from SQLite database"
+  ]
+}
