@@ -506,11 +506,13 @@ class ScraperEngine:
             metadata = job_data.get("metadata")
             if metadata and isinstance(metadata, list):
                 for meta in metadata:
-                    if isinstance(meta, dict) and meta.get("value", "").lower() == "remote":
-                        remote = True
-                        break
+                    if isinstance(meta, dict):
+                        val = meta.get("value")
+                        if isinstance(val, str) and val.lower() == "remote":
+                            remote = True
+                            break
             if not remote:
-                remote = "remote" in location.lower()
+                remote = "remote" in str(location or "").lower()
 
             company_name = src.name.replace(" Greenhouse", "").replace(" ATS", "").strip()
 
