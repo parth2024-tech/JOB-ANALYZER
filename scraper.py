@@ -102,6 +102,15 @@ class ScraperEngine:
         for src in sources_cfg.get("ats_boards", []):
             tasks.append(self._run_source(self.scrape_ats_board, SourceConfig(**src)))
 
+        for src in sources_cfg.get("lever_boards", []):
+            lever_src = SourceConfig(name=src["name"], url=src["slug"], type="lever")
+            tasks.append(self._run_source(self.scrape_lever_board, lever_src))
+
+        for src in sources_cfg.get("playwright_sources", []):
+            tasks.append(self._run_source(self.scrape_naukri_playwright, SourceConfig(**src)))
+
+
+
         results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
         results = {}
@@ -535,6 +544,229 @@ class ScraperEngine:
                 count += 1
 
         print(f"[ATS] {src.name}: {count}/{total} new security jobs")
+        return count, total
+
+
+    # ============ Lever ATS Scraper ============
+    async def scrape_lever_board(self, src: SourceConfig) -> Tuple[int, int]:
+        """Scrape Lever ATS job board by company slug.
+        API: GET https://api.lever.co/v0/postings/{slug}?mode=json
+        """
+        slug = src.url  # src.url holds the slug for Lever boards
+        api_url = f"https://api.lever.co/v0/postings/{slug}?mode=json"
+        print(f"[Lever] Fetching {src.name} ({slug})...")
+        content = await self.fetch(api_url)
+        if not content:
+            return 0, 0
+
+        try:
+            postings = json.loads(content)
+        except json.JSONDecodeError:
+            return 0, 0
+
+        if not isinstance(postings, list):
+            return 0, 0
+
+        total = len(postings)
+        count = 0
+
+        for posting in postings:
+            if not isinstance(posting, dict):
+                continue
+            job = self._parse_lever_posting(posting, src)
+            if job and self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[Lever] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
+
+    def _parse_lever_posting(self, posting: Dict, src: SourceConfig) -> Optional[JobEntry]:
+        """Parse a Lever API posting into a JobEntry."""
+        try:
+            title = posting.get("text", "").strip()
+            cats = posting.get("categories", {})
+            location = cats.get("location", "Remote") or "Remote"
+            job_type_raw = cats.get("commitment", "full-time") or "full-time"
+            team = cats.get("team", "")
+
+            # Normalize job type
+            jt_lower = job_type_raw.lower()
+            if "intern" in jt_lower:
+                job_type = "internship"
+            elif "contract" in jt_lower or "freelance" in jt_lower:
+                job_type = "contract"
+            elif "part" in jt_lower:
+                job_type = "part-time"
+            else:
+                job_type = "full-time"
+
+            # Remote detection
+            remote = (
+                posting.get("workplaceType", "") == "remote" or
+                "remote" in location.lower() or
+                "anywhere" in location.lower()
+            )
+
+            # Description from Lever's descriptionPlain field
+            description = posting.get("descriptionPlain", "") or ""
+            if not description:
+                description = posting.get("descriptionBodyPlain", "") or ""
+            description = description[:5000]
+
+            # Salary from Lever's salaryDescriptionPlain
+            salary_desc = posting.get("salaryDescriptionPlain", "") or ""
+            salary_range = posting.get("salaryRange") or {}
+            if not salary_desc and salary_range:
+                min_sal = salary_range.get("min")
+                max_sal = salary_range.get("max")
+                currency = salary_range.get("currency", "USD")
+                if min_sal and max_sal:
+                    salary_desc = f"{currency} {min_sal} - {max_sal}"
+
+            apply_url = posting.get("applyUrl", posting.get("hostedUrl", ""))
+            company_name = src.name
+
+            return JobEntry(
+                id=f"lever_{src.name}_{posting.get('id', hash(title+location))}",
+                source=src.name,
+                source_url=f"https://jobs.lever.co/{src.url}",
+                title=title,
+                company=company_name,
+                location=location,
+                remote=remote,
+                job_type=job_type,
+                domain_tags=[],
+                description=description,
+                apply_url=apply_url,
+                posted_date=str(posting.get("createdAt", "")),
+            )
+        except Exception as e:
+            print(f"Lever parse error: {e}")
+            return None
+
+
+    # ============ Playwright / Naukri Headless Scraper ============
+    async def scrape_naukri_playwright(self, src: SourceConfig) -> Tuple[int, int]:
+        """Use Playwright to scrape Naukri job listings (bypasses reCAPTCHA)."""
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            print(f"[Playwright] Playwright not installed. Skipping {src.name}")
+            return 0, 0
+
+        print(f"[Playwright] Fetching {src.name}...")
+        jobs_extracted = []
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+                )
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    viewport={"width": 1366, "height": 768},
+                    locale="en-IN",
+                    extra_http_headers={
+                        "Accept-Language": "en-IN,en;q=0.9",
+                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                    }
+                )
+                page = await context.new_page()
+
+                # Block resource-heavy assets for speed
+                await page.route("**/*.{png,jpg,gif,svg,woff,woff2}", lambda r: r.abort())
+
+                # Navigate to job search page
+                await page.goto(src.url, wait_until="domcontentloaded", timeout=30000)
+                await asyncio.sleep(3)  # Let dynamic content load
+
+                # Try multiple selectors for Naukri job cards
+                # Naukri uses different class names that may vary
+                job_cards = []
+                selectors = [
+                    "article.jobTuple",
+                    "div.jobTuple",
+                    "div[class*='srp-jobtuple']",
+                    "div.job-post",
+                    "li.sjw__tuple",
+                    "article[data-job-id]",
+                ]
+                for sel in selectors:
+                    cards = await page.query_selector_all(sel)
+                    if cards:
+                        job_cards = cards
+                        print(f"[Playwright] Found {len(cards)} cards with selector: {sel}")
+                        break
+
+                for card in job_cards[:25]:  # Max 25 per page
+                    try:
+                        # Extract title
+                        title_el = await card.query_selector("a.title, a[data-analytics-label='srp-jobTuple-title'], h2 a, .jobTitle a")
+                        title = await title_el.inner_text() if title_el else ""
+                        title = title.strip()
+
+                        # Extract company
+                        company_el = await card.query_selector("a.subTitle, a[data-analytics-label='company'], .companyInfo a, .company-name")
+                        company = await company_el.inner_text() if company_el else ""
+                        company = company.strip()
+
+                        # Extract location
+                        loc_el = await card.query_selector("span.location, li.location, .locWdth, .naukri-icon.loc")
+                        location = await loc_el.inner_text() if loc_el else "India"
+                        location = location.strip() or "India"
+
+                        # Extract salary
+                        sal_el = await card.query_selector("span.salary, li.salary, .sal, .naukri-icon.salary")
+                        salary_text = await sal_el.inner_text() if sal_el else ""
+
+                        # Extract apply URL
+                        link_el = await card.query_selector("a.title, a[data-analytics-label='srp-jobTuple-title'], h2 a")
+                        apply_url = await link_el.get_attribute("href") if link_el else src.url
+                        if apply_url and not apply_url.startswith("http"):
+                            apply_url = f"https://www.naukri.com{apply_url}"
+
+                        if not title or not company:
+                            continue
+
+                        jobs_extracted.append({
+                            "title": title,
+                            "company": company,
+                            "location": location,
+                            "salary_text": salary_text,
+                            "apply_url": apply_url,
+                        })
+                    except Exception as e:
+                        print(f"[Playwright] Card parse error: {e}")
+                        continue
+
+                await browser.close()
+
+        except Exception as e:
+            print(f"[Playwright] Error for {src.name}: {e}")
+            return 0, 0
+
+        total = len(jobs_extracted)
+        count = 0
+
+        for jd in jobs_extracted:
+            job = JobEntry(
+                id=f"naukri_{hash(jd['title'] + jd['company'] + jd['location'])}",
+                source=src.name,
+                source_url=src.url,
+                title=jd["title"],
+                company=jd["company"],
+                location=jd["location"],
+                remote="remote" in jd["location"].lower() or "work from home" in jd["location"].lower(),
+                job_type="internship" if "intern" in jd["title"].lower() else "full-time",
+                domain_tags=[],
+                description=jd.get("salary_text", ""),
+                apply_url=jd["apply_url"],
+            )
+            if self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[Playwright] {src.name}: {count}/{total} new India cyber jobs")
         return count, total
 
 

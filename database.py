@@ -10,6 +10,222 @@ from contextlib import contextmanager
 import hashlib
 
 
+# =========================================================================
+# SALARY EXTRACTION & NORMALIZATION
+# =========================================================================
+
+# Approximate exchange rate (INR per USD) - update periodically
+USD_TO_INR = 84.0
+INR_LPA_DIVISOR = 100_000  # 1 Lakh = 100,000 INR
+
+# Salary regex patterns (ordered: most specific first)
+_LPA_RANGE_PAT = re.compile(
+    r'(\d{1,3}(?:\.\d+)?)\s*[-–to]+\s*(\d{1,3}(?:\.\d+)?)\s*'
+    r'(?:L|lakh|lakhs?|LPA|lpa|lac)\b',
+    re.IGNORECASE
+)
+_LPA_SINGLE_PAT = re.compile(
+    r'(\d{1,3}(?:\.\d+)?)\s*(?:LPA|lpa)\b|'  # explicit "LPA" suffix
+    r'(\d{1,3}(?:\.\d+)?)\s*(?:L|lakh|lakhs?|lac)\b(?:\s*(?:per\s+annum|p\.?a\.?|CTC))',
+    re.IGNORECASE
+)
+_INR_MONTHLY_PAT = re.compile(
+    r'(?:INR|Rs\.?|₹)\s*(\d{1,6}(?:,\d{3})*(?:\.\d+)?)\s*'
+    r'(?:per\s+month|/\s*month|p\.?m\.?|monthly)',
+    re.IGNORECASE
+)
+_INR_ANNUAL_PAT = re.compile(
+    r'(?:INR|Rs\.?|₹)\s*(\d{1,10}(?:,\d{3})*(?:\.\d+)?)\s*'
+    r'(?:per\s+(?:year|annum)|/\s*yr|annual|p\.?a\.?|CTC)?',
+    re.IGNORECASE
+)
+_USD_RANGE_PAT = re.compile(
+    r'(?:\$|USD\s*)(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*[kK]?\s*[-–to]+\s*'
+    r'(?:\$|USD\s*)?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*[kK]?\s*'
+    r'(?:per\s+(?:year|yr|annum)|/\s*yr|annual|USD|usd)?',
+    re.IGNORECASE
+)
+_USD_SINGLE_PAT = re.compile(
+    r'(?:USD|usd|\$)\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*[kK]?\s*'
+    r'(?:per\s+(?:year|yr|annum)|/\s*yr|annual)?',
+    re.IGNORECASE
+)
+
+
+def _clean_num(s: str) -> float:
+    """Remove commas, parse float."""
+    return float(s.replace(",", "").strip())
+
+
+def extract_salary(text: str) -> dict:
+    """
+    Extract salary information from job description or salary field text.
+    Returns dict: { salary_inr_lpa_min, salary_inr_lpa_max, salary_display, currency }
+    """
+    if not text:
+        return {}
+    text = str(text)
+
+    # 1. LPA range: "12-18 LPA", "8.5 to 15 Lakhs"
+    m = _LPA_RANGE_PAT.search(text)
+    if m:
+        lo, hi = _clean_num(m.group(1)), _clean_num(m.group(2))
+        return {
+            "salary_inr_lpa_min": lo,
+            "salary_inr_lpa_max": hi,
+            "salary_display": f"₹{lo:.0f}L–₹{hi:.0f}L/yr",
+            "currency": "INR"
+        }
+
+    # 2. LPA single: "15 LPA", "10 Lakhs CTC"
+    m = _LPA_SINGLE_PAT.search(text)
+    if m:
+        val = _clean_num(next(g for g in m.groups() if g is not None))
+        return {
+            "salary_inr_lpa_min": val,
+            "salary_inr_lpa_max": val,
+            "salary_display": f"₹{val:.0f}L/yr",
+            "currency": "INR"
+        }
+
+
+    # 3. INR monthly: "₹25,000/month" → annualize → LPA
+    m = _INR_MONTHLY_PAT.search(text)
+    if m:
+        monthly = _clean_num(m.group(1))
+        annual_lpa = (monthly * 12) / INR_LPA_DIVISOR
+        return {
+            "salary_inr_lpa_min": round(annual_lpa, 2),
+            "salary_inr_lpa_max": round(annual_lpa, 2),
+            "salary_display": f"₹{monthly/1000:.0f}k/mo (~₹{annual_lpa:.1f}L/yr)",
+            "currency": "INR"
+        }
+
+    # 4. USD range: "$80,000 - $120,000" or "$80k-$120k"
+    m = _USD_RANGE_PAT.search(text)
+    if m:
+        lo_str, hi_str = m.group(1), m.group(2)
+        lo = _clean_num(lo_str)
+        hi = _clean_num(hi_str)
+        # Detect "k" suffix
+        full_match = m.group(0).lower()
+        if lo < 500:  # Likely in thousands
+            lo, hi = lo * 1000, hi * 1000
+        lo_inr_lpa = (lo * USD_TO_INR) / INR_LPA_DIVISOR
+        hi_inr_lpa = (hi * USD_TO_INR) / INR_LPA_DIVISOR
+        lo_k = int(lo / 1000)
+        hi_k = int(hi / 1000)
+        return {
+            "salary_inr_lpa_min": round(lo_inr_lpa, 1),
+            "salary_inr_lpa_max": round(hi_inr_lpa, 1),
+            "salary_display": f"${lo_k}k–${hi_k}k (~₹{lo_inr_lpa:.0f}L–₹{hi_inr_lpa:.0f}L)",
+            "currency": "USD"
+        }
+
+    # 5. USD single: "$95,000" or "USD 95000"
+    m = _USD_SINGLE_PAT.search(text)
+    if m:
+        val = _clean_num(m.group(1))
+        if val < 500:
+            val = val * 1000
+        val_inr_lpa = (val * USD_TO_INR) / INR_LPA_DIVISOR
+        val_k = int(val / 1000)
+        return {
+            "salary_inr_lpa_min": round(val_inr_lpa, 1),
+            "salary_inr_lpa_max": round(val_inr_lpa, 1),
+            "salary_display": f"${val_k}k (~₹{val_inr_lpa:.0f}L/yr)",
+            "currency": "USD"
+        }
+
+    return {}
+
+
+# =========================================================================
+# COMPANY CATEGORY CLASSIFICATION
+# =========================================================================
+
+_VENDOR_COMPANIES = {
+    "crowdstrike", "sentinelone", "palo alto networks", "paloaltonetworks",
+    "zscaler", "cloudflare", "sophos", "qualys", "tenable", "rapid7",
+    "snyk", "lacework", "wiz", "vectra", "vectra ai", "abnormal security",
+    "axonius", "orca security", "darktrace", "cyberark", "beyondtrust",
+    "sailpoint", "saviynt", "imperva", "proofpoint", "mimecast", "forcepoint",
+    "fortinet", "checkpoint", "cisco", "f5", "barracuda", "trellix", "mcafee",
+    "symantec", "broadcom security", "bitdefender", "kaspersky", "eset",
+    "cybereason", "nozomi networks", "claroty", "dragos", "armis",
+    "pentera", "recorded future", "drata", "vanta", "secureframe",
+    "threatlocker", "hackerone", "bugcrowd", "netspi", "intigriti",
+    "synack", "cobalt", "cobalt.io", "detectify", "bishop fox", "bishopfox",
+    "offensive security", "offsec", "exabeam", "securonix", "logrhythm",
+    "sumo logic", "splunk", "ibm qradar", "microsoft sentinel",
+    "elastic security", "datadog security", "huntress", "corelight",
+    "stairwell", "expel", "red canary", "blumira"
+}
+
+_MSSP_COMPANIES = {
+    "secureworks", "arctic wolf", "herjavec", "optiv", "ntt security",
+    "trustwave", "verizon business", "orange cyberdefense", "atos security",
+    "barrracuda", "ciphertechs", "coalfire", "kudelski security",
+    "herjavec group", "vigilant", "pricewaterhousecoopers security",
+    "seconize", "sequretek", "lucideus", "indusface", "webwerks",
+    "cybersuraksha", "tata tele business services", "ttbs",
+    "sisa", "instasafe", "kratikal", "aujas", "appviewx",
+    "suma soft", "novac technology", "briskinfosec", "iarmor",
+    "fidelis cybersecurity", "cipher", "netsync"
+}
+
+_CONSULTING_BIG4 = {
+    "deloitte", "pwc", "pricewaterhousecoopers", "kpmg", "ey",
+    "ernst & young", "ernst young", "accenture", "capgemini",
+    "ibm", "ibm consulting", "ibm global services", "bcg",
+    "booz allen hamilton", "booz allen", "leidos", "saic",
+    "mantech", "cognizant", "mindtree", "mphasis", "hexaware",
+    "infosys bpm"
+}
+
+_INDIAN_IT = {
+    "tata consultancy", "tcs", "wipro", "infosys", "hcl", "hcltech",
+    "hcl technologies", "ltimindtree", "lti", "mindtree",
+    "tech mahindra", "techmahindra", "mphasis", "hexaware",
+    "persistent systems", "cyient", "sonata software", "niit technologies",
+    "mastech", "zensar", "birlasoft", "tata elxsi", "l&t technology",
+    "larsen toubro", "l&t infotech", "nagarro", "sasken", "kellton tech"
+}
+
+_GOVERNMENT = {
+    "cert-in", "cert in", "drdo", "nic", "ncsc", "cisa", "nsa", "dod",
+    "isro", "bel", "hal", "defence research", "department of defence",
+    "ministry of defence", "government of india", "indian navy",
+    "indian army", "indian air force", "central government", "state government",
+    "national informatics", "cdac", "c-dac", "iit", "nit",
+    "dsci", "nasscom", "nciipc"
+}
+
+
+def classify_company(company_name: str) -> str:
+    """
+    Classify company into a category string.
+    Returns: 'vendor', 'mssp', 'consulting', 'indian_it', 'government', or 'other'
+    """
+    if not company_name:
+        return "other"
+    name_lower = company_name.lower().strip()
+
+    # Match against sets (exact or partial substring)
+    if any(v in name_lower or name_lower in v for v in _VENDOR_COMPANIES):
+        return "vendor"
+    if any(m in name_lower or name_lower in m for m in _MSSP_COMPANIES):
+        return "mssp"
+    if any(c in name_lower or name_lower in c for c in _INDIAN_IT):
+        return "indian_it"
+    if any(c in name_lower or name_lower in c for c in _CONSULTING_BIG4):
+        return "consulting"
+    if any(g in name_lower or name_lower in g for g in _GOVERNMENT):
+        return "government"
+    return "other"
+
+
+
 @dataclass
 class JobEntry:
     id: str
@@ -248,7 +464,11 @@ class JobDatabase:
             # Add new columns to existing table if upgrading
             for col, coldef in [
                 ("seniority_level", "TEXT DEFAULT 'mid'"),
-                ("skills_required", "TEXT DEFAULT '[]'")
+                ("skills_required", "TEXT DEFAULT '[]'"),
+                ("salary_display", "TEXT DEFAULT ''"),
+                ("salary_inr_lpa_min", "REAL DEFAULT NULL"),
+                ("salary_inr_lpa_max", "REAL DEFAULT NULL"),
+                ("company_category", "TEXT DEFAULT 'other'")
             ]:
                 try:
                     conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} {coldef}")
@@ -293,6 +513,8 @@ class JobDatabase:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_job_type ON jobs(job_type)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_seniority ON jobs(seniority_level)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_location_type_remote ON jobs(location, job_type, remote)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_company_category ON jobs(company_category)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_salary_lpa ON jobs(salary_inr_lpa_max)")
 
             # FTS5 virtual table for full-text search
             conn.execute("""
@@ -372,6 +594,13 @@ class JobDatabase:
         skills = extract_skills(job.description)
         job.skills_required = json.dumps(skills)
 
+        # Salary & company category extraction
+        salary_info = extract_salary(f"{job.title} {job.description}")
+        salary_display = salary_info.get("salary_display", "")
+        salary_inr_lpa_min = salary_info.get("salary_inr_lpa_min")
+        salary_inr_lpa_max = salary_info.get("salary_inr_lpa_max")
+        company_category = classify_company(job.company)
+
         with self._conn() as conn:
             try:
                 conn.execute("""
@@ -379,15 +608,17 @@ class JobDatabase:
                         id, source, source_url, title, company, location, remote,
                         job_type, domain_tags, salary_min, salary_max, salary_currency,
                         description, apply_url, posted_date, discovered_at, hash,
-                        seniority_level, skills_required
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        seniority_level, skills_required, salary_display,
+                        salary_inr_lpa_min, salary_inr_lpa_max, company_category
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     job.id, job.source, job.source_url, job.title, job.company,
                     job.location, int(job.remote), job.job_type,
                     json.dumps(job.domain_tags), job.salary_min, job.salary_max,
                     job.salary_currency, job.description, job.apply_url,
                     job.posted_date, job.discovered_at, job.hash,
-                    job.seniority_level, job.skills_required
+                    job.seniority_level, job.skills_required, salary_display,
+                    salary_inr_lpa_min, salary_inr_lpa_max, company_category
                 ))
                 return True
             except sqlite3.IntegrityError:
@@ -568,6 +799,8 @@ class JobDatabase:
         remote: Optional[bool] = None,
         source: str = "",
         seniority: str = "",
+        company_category: str = "",
+        min_salary_lpa: Optional[float] = None,
         sort_by: str = "newest",
         location_scope: str = "all",
         target_only: bool = False,
@@ -590,6 +823,14 @@ class JobDatabase:
         if seniority and seniority != "all":
             conditions.append("seniority_level = ?")
             params.append(seniority)
+
+        if company_category and company_category != "all":
+            conditions.append("company_category = ?")
+            params.append(company_category)
+
+        if min_salary_lpa is not None and min_salary_lpa > 0:
+            conditions.append("salary_inr_lpa_max >= ?")
+            params.append(min_salary_lpa)
 
         if domain and domain != "all":
             conditions.append("domain_tags LIKE ?")
@@ -620,7 +861,8 @@ class JobDatabase:
             "newest": "discovered_at DESC, id DESC",
             "oldest": "discovered_at ASC, id ASC",
             "title": "title ASC",
-            "company": "company ASC"
+            "company": "company ASC",
+            "salary_high": "salary_inr_lpa_max DESC, discovered_at DESC"
         }
         order_clause = f"ORDER BY {sort_map.get(sort_by, 'discovered_at DESC, id DESC')}"
         offset = max(0, (page - 1) * page_size)
@@ -702,6 +944,14 @@ class JobDatabase:
                 "SELECT seniority_level, COUNT(*) as c FROM jobs GROUP BY seniority_level ORDER BY c DESC"
             ).fetchall()}
 
+            by_company_category = {r["company_category"]: r["c"] for r in conn.execute(
+                "SELECT company_category, COUNT(*) as c FROM jobs GROUP BY company_category ORDER BY c DESC"
+            ).fetchall()}
+
+            salary_jobs_count = conn.execute(
+                "SELECT COUNT(*) FROM jobs WHERE salary_display IS NOT NULL AND salary_display != ''"
+            ).fetchone()[0]
+
             by_source = {r["source"]: r["c"] for r in conn.execute(
                 "SELECT source, COUNT(*) as c FROM jobs GROUP BY source ORDER BY c DESC LIMIT 10"
             ).fetchall()}
@@ -728,6 +978,8 @@ class JobDatabase:
                 "global_remote_intern_count": global_remote_intern_count,
                 "by_type": by_type,
                 "by_seniority": by_seniority,
+                "by_company_category": by_company_category,
+                "salary_jobs_count": salary_jobs_count,
                 "by_source": by_source,
                 "top_companies": top_companies,
                 "top_domains": top_domains,
@@ -749,6 +1001,43 @@ class JobDatabase:
                     continue
         sorted_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)
         return [{"tag": k, "count": v} for k, v in sorted_tags]
+
+
+    def backfill_enrichment(self) -> Dict[str, int]:
+        """Backfill existing jobs with company category and salary extraction."""
+        updated = 0
+        with self._conn() as conn:
+            rows = conn.execute("SELECT id, title, company, description, salary_display, company_category FROM jobs").fetchall()
+            for r in rows:
+                jid = r["id"]
+                comp = r["company"]
+                desc = r["description"] or ""
+                current_disp = r["salary_display"] or ""
+                current_cat = r["company_category"] or "other"
+
+                new_cat = classify_company(comp)
+                sal = extract_salary(desc) if not current_disp else {}
+
+                updates = []
+                params = []
+
+                if new_cat != current_cat:
+                    updates.append("company_category = ?")
+                    params.append(new_cat)
+
+                if sal:
+                    updates.append("salary_display = ?")
+                    params.append(sal.get("salary_display", ""))
+                    updates.append("salary_inr_lpa_min = ?")
+                    params.append(sal.get("salary_inr_lpa_min"))
+                    updates.append("salary_inr_lpa_max = ?")
+                    params.append(sal.get("salary_inr_lpa_max"))
+
+                if updates:
+                    params.append(jid)
+                    conn.execute(f"UPDATE jobs SET {', '.join(updates)} WHERE id = ?", tuple(params))
+                    updated += 1
+        return {"updated": updated, "total": len(rows)}
 
     def vacuum(self) -> None:
         with self._conn() as conn:

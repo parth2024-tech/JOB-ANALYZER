@@ -5,6 +5,7 @@
 const state = {
   page: 1, pageSize: 24, totalPages: 1, totalJobs: 0,
   search: "", type: "", domain: "", source: "", seniority: "",
+  company_category: "", min_salary_lpa: "",
   sort: "newest", location_scope: "all", remote: null,
   viewMode: localStorage.getItem("viewMode") || "grid",
   lastTimestamp: new Date().toISOString(),
@@ -241,6 +242,11 @@ function clearFilters() {
   document.getElementById("domain-select").value = "";
   document.getElementById("source-select").value = "";
   document.getElementById("sort-select").value = "newest";
+  const salEl = document.getElementById("salary-select");
+  if (salEl) salEl.value = "";
+  state.company_category = "";
+  state.min_salary_lpa = "";
+  document.querySelectorAll("#category-tabs .pill").forEach(p => p.classList.toggle("active", p.dataset.val === ""));
   document.getElementById("remote-toggle").textContent = "Any";
   document.getElementById("remote-toggle").classList.remove("active");
   document.querySelectorAll(".tab-pills .pill").forEach(p => p.classList.toggle("active", p.dataset.val === "" || p.dataset.val === "all"));
@@ -287,6 +293,8 @@ async function loadJobs() {
   if (state.domain) params.set("domain", state.domain);
   if (state.source) params.set("source", state.source);
   if (state.seniority) params.set("seniority", state.seniority);
+  if (state.company_category) params.set("company_category", state.company_category);
+  if (state.min_salary_lpa) params.set("min_salary_lpa", state.min_salary_lpa);
   if (state.sort) params.set("sort", state.sort);
   if (state.location_scope) params.set("location_scope", state.location_scope);
   if (state.remote !== null) params.set("remote", state.remote ? "1" : "0");
@@ -319,13 +327,27 @@ async function loadJobs() {
   }
 }
 
+
+function getCategoryInfo(cat) {
+  const map = {
+    vendor: { icon: "🏭", label: "Vendor", cls: "badge-cat-vendor" },
+    mssp: { icon: "🛡️", label: "MSSP", cls: "badge-cat-mssp" },
+    consulting: { icon: "🏢", label: "Consulting", cls: "badge-cat-consulting" },
+    indian_it: { icon: "🇮🇳", label: "Indian IT", cls: "badge-cat-indian-it" },
+    government: { icon: "🏛️", label: "Govt", cls: "badge-cat-govt" },
+    other: { icon: "💼", label: "Enterprise", cls: "badge-cat-other" },
+  };
+  return map[cat] || { icon: "💼", label: cat || "Enterprise", cls: "badge-cat-other" };
+}
+
 // ===== RENDER GRID =====
 function renderJobCards(jobs) {
   const grid = document.getElementById("job-grid");
   grid.innerHTML = jobs.map(j => {
     const routes = j.application_routes || {};
     const directUrl = routes.direct_url || j.apply_url || "#";
-    const seniority = j.seniority_level || "mid";
+        const seniority = j.seniority_level || "mid";
+    const catInfo = getCategoryInfo(j.company_category);
     const seniorityLabel = { junior: "🟢 Junior", mid: "🔵 Mid", senior: "🟡 Senior", lead: "🟠 Lead", manager: "🔴 Manager" }[seniority] || seniority;
     const skills = (j.skills_required || []).slice(0, 4);
     const tags = (j.domain_tags || []).slice(0, 4);
@@ -347,12 +369,17 @@ function renderJobCards(jobs) {
       <div class="card-meta">
         <span class="badge badge-type">${j.job_type || 'full-time'}</span>
         <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>
+        <span class="badge ${catInfo.cls}">${catInfo.icon} ${catInfo.label}</span>
+        ${j.salary_display ? `<span class="badge badge-salary">💰 ${escapeHtml(j.salary_display)}</span>` : ''}
         ${j.remote ? '<span class="badge badge-remote">🌍 Remote</span>' : ''}
         ${j.target_badge ? `<span class="badge badge-target">${j.target_badge}</span>` : ''}
         ${isApplied ? '<span class="badge badge-applied">✅ Applied</span>' : ''}
       </div>
 
-      <div class="card-location">📍 ${escapeHtml(j.location || 'Remote')}</div>
+      <div class="card-location">
+        📍 ${escapeHtml(j.location || 'Remote')}
+        ${j.salary_display ? ` &nbsp;•&nbsp; <span class="salary-text">💰 ${escapeHtml(j.salary_display)}</span>` : ''}
+      </div>
 
       ${tags.length ? `<div class="domain-tags">${tags.map(t => `<span class="domain-tag">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
       ${skills.length ? `<div class="skills-tags">${skills.map(s => `<span class="skill-tag">⚡ ${escapeHtml(s)}</span>`).join("")}</div>` : ""}

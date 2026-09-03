@@ -99,6 +99,52 @@ sources:
     - name: "Pentera"
       url: "https://boards-api.greenhouse.io/v1/boards/pentera/jobs"
       type: "ats_json"
+    # --- INDIA-FOCUSED SECURITY VENDORS (confirmed India offices) ---
+    - name: "BeyondTrust"
+      url: "https://boards-api.greenhouse.io/v1/boards/beyondtrust/jobs"
+      type: "ats_json"
+    - name: "Nozomi Networks"
+      url: "https://boards-api.greenhouse.io/v1/boards/nozominetworks/jobs"
+      type: "ats_json"
+    - name: "Cybereason"
+      url: "https://boards-api.greenhouse.io/v1/boards/cybereason/jobs"
+      type: "ats_json"
+    - name: "Claroty"
+      url: "https://boards-api.greenhouse.io/v1/boards/claroty/jobs"
+      type: "ats_json"
+    - name: "Drata"
+      url: "https://boards-api.greenhouse.io/v1/boards/drata/jobs"
+      type: "ats_json"
+
+  # --- LEVER ATS (confirmed working endpoints) ---
+  lever_boards:
+    - name: "Sophos"
+      slug: "sophos"
+    - name: "Qualys"
+      slug: "qualys"
+    - name: "HackerOne"
+      slug: "hackerone"
+    - name: "BugCrowd"
+      slug: "bugcrowd"
+    - name: "NetSPI"
+      slug: "netspi"
+    - name: "ThreatLocker"
+      slug: "threatlocker"
+
+  # --- PLAYWRIGHT / HEADLESS SCRAPER (Naukri India) ---
+  playwright_sources:
+    - name: "Naukri Cybersecurity India"
+      url: "https://www.naukri.com/cybersecurity-jobs-in-india"
+      type: "playwright_naukri"
+    - name: "Naukri Information Security India"
+      url: "https://www.naukri.com/information-security-jobs-in-india"
+      type: "playwright_naukri"
+    - name: "Naukri SOC Analyst India"
+      url: "https://www.naukri.com/soc-analyst-jobs-in-india"
+      type: "playwright_naukri"
+    - name: "Naukri Penetration Testing India"
+      url: "https://www.naukri.com/penetration-testing-jobs-in-india"
+      type: "playwright_naukri"
 
 keywords:
   domains:

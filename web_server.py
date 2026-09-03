@@ -77,6 +77,7 @@ class CyberSecWebServer:
         self.app.router.add_get("/api/status", self.handle_api_status)
 
         # Search autocomplete
+        self.app.router.add_get("/api/company-categories", self.handle_api_company_categories)
         self.app.router.add_get("/api/search/suggestions", self.handle_api_suggestions)
 
         # History
@@ -180,6 +181,14 @@ class CyberSecWebServer:
         sort_by = params.get("sort", "newest").strip()
         location_scope = params.get("location_scope", "all").strip()
         target_only = params.get("target_only", "").lower().strip() in ("1", "true", "yes")
+        company_category = params.get("company_category", "").strip()
+        min_salary_lpa = None
+        try:
+            val = params.get("min_salary_lpa", "").strip()
+            if val:
+                min_salary_lpa = float(val)
+        except ValueError:
+            min_salary_lpa = None
 
         remote_val = params.get("remote", "").lower().strip()
         remote: Optional[bool] = None
@@ -199,7 +208,8 @@ class CyberSecWebServer:
 
         result = self.db.get_jobs_filtered(
             search=search, job_type=job_type, domain=domain, remote=remote,
-            source=source, seniority=seniority, sort_by=sort_by,
+            source=source, seniority=seniority, company_category=company_category,
+            min_salary_lpa=min_salary_lpa, sort_by=sort_by,
             location_scope=location_scope, target_only=target_only,
             page=page, page_size=page_size
         )
@@ -274,6 +284,26 @@ class CyberSecWebServer:
             "last_scrape_results": self.last_scrape_stats
         })
 
+    # ========== Company Categories ==========
+    async def handle_api_company_categories(self, request: web.Request) -> web.Response:
+        categories = [
+            {"id": "all", "label": "All Categories", "icon": "🌐"},
+            {"id": "vendor", "label": "Product / Vendor", "icon": "🏭"},
+            {"id": "mssp", "label": "MSSP / MDR", "icon": "🛡️"},
+            {"id": "consulting", "label": "Consulting & Advisory", "icon": "🏢"},
+            {"id": "indian_it", "label": "Indian IT Services", "icon": "🇮🇳"},
+            {"id": "government", "label": "Government & Defence", "icon": "🏛️"},
+            {"id": "other", "label": "Enterprise / Other", "icon": "💼"},
+        ]
+        stats = self.db.get_detailed_stats()
+        cat_counts = stats.get("by_company_category", {})
+        for cat in categories:
+            if cat["id"] == "all":
+                cat["count"] = stats.get("total", 0)
+            else:
+                cat["count"] = cat_counts.get(cat["id"], 0)
+        return web.json_response({"categories": categories})
+
     # ========== Search Suggestions ==========
     async def handle_api_suggestions(self, request: web.Request) -> web.Response:
         q = request.query.get("q", "").strip()
@@ -330,7 +360,8 @@ class CyberSecWebServer:
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow([
-            "Title", "Company", "Location", "Job Type", "Seniority", "Remote",
+            "Title", "Company", "Company Category", "Location", "Job Type", "Seniority",
+            "Salary", "Salary Min LPA", "Salary Max LPA", "Remote",
             "Domain Tags", "Skills", "Direct Apply URL", "Google Jobs URL",
             "LinkedIn URL", "Is India", "Is Target Match", "Source", "Discovered At"
         ])
@@ -339,9 +370,13 @@ class CyberSecWebServer:
             writer.writerow([
                 job.get("title", ""),
                 job.get("company", ""),
+                job.get("company_category", "other"),
                 job.get("location", ""),
                 job.get("job_type", ""),
                 job.get("seniority_level", ""),
+                job.get("salary_display", ""),
+                job.get("salary_inr_lpa_min") or "",
+                job.get("salary_inr_lpa_max") or "",
                 "Yes" if job.get("remote") else "No",
                 ", ".join(job.get("domain_tags", [])),
                 ", ".join(job.get("skills_required", [])),

@@ -28,3 +28,5 @@ tqdm>=4.66.0
 
 # Optional: Better logging
 loguru>=0.7.0
+playwright>=1.44.0
+

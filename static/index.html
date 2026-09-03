@@ -107,6 +107,19 @@
         <button class="pill" data-val="manager" onclick="setFilter('seniority', 'manager', this, 'seniority-tabs')">🔴 Manager</button>
       </div>
     </div>
+
+    <!-- Company Category -->
+    <div class="filter-group">
+      <label class="filter-label">Category</label>
+      <div class="tab-pills" id="category-tabs">
+        <button class="pill active" data-val="" onclick="setFilter('company_category', '', this, 'category-tabs')">All</button>
+        <button class="pill" data-val="vendor" onclick="setFilter('company_category', 'vendor', this, 'category-tabs')">🏭 Vendor</button>
+        <button class="pill" data-val="mssp" onclick="setFilter('company_category', 'mssp', this, 'category-tabs')">🛡️ MSSP</button>
+        <button class="pill" data-val="consulting" onclick="setFilter('company_category', 'consulting', this, 'category-tabs')">🏢 Consulting</button>
+        <button class="pill" data-val="indian_it" onclick="setFilter('company_category', 'indian_it', this, 'category-tabs')">🇮🇳 Indian IT</button>
+        <button class="pill" data-val="government" onclick="setFilter('company_category', 'government', this, 'category-tabs')">🏛️ Govt</button>
+      </div>
+    </div>
   </div>
 
   <div class="filter-row filter-row-2">
@@ -126,11 +139,25 @@
       </select>
     </div>
 
+    <!-- Min Salary -->
+    <div class="filter-group">
+      <label class="filter-label">Min Salary</label>
+      <select id="salary-select" class="filter-select" onchange="applyFilters()">
+        <option value="">Any Salary</option>
+        <option value="5">≥ ₹5 LPA</option>
+        <option value="10">≥ ₹10 LPA</option>
+        <option value="20">≥ ₹20 LPA</option>
+        <option value="35">≥ ₹35 LPA</option>
+        <option value="50">≥ ₹50 LPA</option>
+      </select>
+    </div>
+
     <!-- Sort -->
     <div class="filter-group">
       <label class="filter-label">Sort</label>
       <select id="sort-select" class="filter-select" onchange="applyFilters()">
         <option value="newest">Newest First</option>
+        <option value="salary_high">💰 Highest Salary</option>
         <option value="oldest">Oldest First</option>
         <option value="title">Title A-Z</option>
         <option value="company">Company A-Z</option>
@@ -172,6 +199,10 @@
     <div class="chart-card">
       <h3 class="chart-title">By Seniority Level</h3>
       <canvas id="chart-seniority" height="180"></canvas>
+    </div>
+    <div class="chart-card">
+      <h3 class="chart-title">By Company Category</h3>
+      <canvas id="chart-category" height="180"></canvas>
     </div>
   </div>
 
