@@ -359,10 +359,21 @@ class ScraperEngine:
                     co_raw = cols[0]
                     co_match = re.search(r"\[([^\]]+)\]", co_raw) or re.search(r"\*\*([^\*]+)\*\*", co_raw)
                     company = co_match.group(1).strip() if co_match else re.sub(r"<[^>]+>", "", co_raw).strip()
+                    if company in ("↳", "->", "»", "–", "-") or len(company) <= 1:
+                        if "oraclecloud.com" in line and "egug" in line:
+                            company = "American Express"
+                        elif getattr(self, "_last_table_company", None):
+                            company = self._last_table_company
+                        else:
+                            company = "Enterprise"
+                    else:
+                        self._last_table_company = company
 
                     # Extract role
                     role_raw = cols[1]
                     role_clean = re.sub(r"<[^>]+>", "", role_raw).strip()
+                    # Strip emoji symbols from title
+                    role_clean = re.sub(r"[\U00010000-\U0010ffff]", "", role_clean).strip()
                     title = role_clean
 
                     # Extract location

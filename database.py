@@ -2,6 +2,7 @@ import sqlite3
 import json
 import re
 import urllib.parse
+import asyncio
 from datetime import datetime, timezone, timedelta
 import dateutil.parser
 from pathlib import Path
@@ -1158,6 +1159,61 @@ class JobDatabase:
                     updated += 1
         return {"updated": updated, "total": len(rows)}
 
+
+
+    async def verify_and_purge_broken_links(self) -> Dict[str, Any]:
+        """Asynchronously test all job links and purge broken/closed ones."""
+        import aiohttp
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        }
+        closed_phrases = [
+            "job is no longer available", "position has been filled",
+            "job has expired", "this job has been closed", "page not found",
+            "job no longer exists", "no longer accepting applications",
+            "we cannot find the page", "error 404"
+        ]
+
+        with self._conn() as conn:
+            rows = conn.execute("SELECT id, title, company, apply_url FROM jobs").fetchall()
+
+        if not rows:
+            return {"total": 0, "verified": 0, "purged": 0}
+
+        async def check(session, r):
+            jid, title, comp, url = r["id"], r["title"], r["company"], r["apply_url"]
+            if not url or not url.startswith("http"):
+                return jid, False, "No URL"
+            try:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                    status = resp.status
+                    if status >= 400:
+                        return jid, False, f"HTTP {status}"
+                    text = (await resp.text(errors="ignore")).lower()
+                    for cp in closed_phrases:
+                        if cp in text:
+                            return jid, False, f"Closed text: {cp}"
+                    return jid, True, "OK"
+            except Exception as e:
+                return jid, False, str(e)[:30]
+
+        connector = aiohttp.TCPConnector(ssl=False)
+        async with aiohttp.ClientSession(connector=connector, headers=headers) as session:
+            results = await asyncio.gather(*[check(session, r) for r in rows])
+
+        purged_ids = [jid for jid, ok, reason in results if not ok]
+        if purged_ids:
+            with self._conn() as conn:
+                for jid in purged_ids:
+                    conn.execute("DELETE FROM jobs WHERE id = ?", (jid,))
+                try:
+                    conn.execute("INSERT INTO jobs_fts(jobs_fts) VALUES('rebuild')")
+                except Exception:
+                    pass
+            self.vacuum()
+
+        verified = len(rows) - len(purged_ids)
+        return {"total": len(rows), "verified": verified, "purged": len(purged_ids)}
 
     def purge_expired_and_experienced_jobs(self, max_days: int = 14) -> Dict[str, int]:
         """Purge jobs that are older than max_days (2 weeks) or not for fresher/intern."""

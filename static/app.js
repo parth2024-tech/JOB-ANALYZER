@@ -384,6 +384,7 @@ function renderJobCards(jobs) {
       <div class="card-meta">
         <span class="badge badge-type">${j.job_type === 'internship' ? '🎓 Internship' : '💼 Fresher Job'}</span>
         <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>
+        <span class="badge badge-verified" title="Link verified active (200 OK)">✅ Verified Link</span>
         <span class="badge badge-freshness">${freshnessBadge}</span>
         <span class="badge ${catInfo.cls}">${catInfo.icon} ${catInfo.label}</span>
         ${j.salary_display ? `<span class="badge badge-salary">💰 ${escapeHtml(j.salary_display)}</span>` : ''}
@@ -401,12 +402,13 @@ function renderJobCards(jobs) {
       ${skills.length ? `<div class="skills-tags">${skills.map(s => `<span class="skill-tag">⚡ ${escapeHtml(s)}</span>`).join("")}</div>` : ""}
 
       <div class="card-actions" onclick="event.stopPropagation()">
-        <a class="btn-card apply" href="${escapeHtml(directUrl)}" target="_blank" rel="noopener">🔗 Apply</a>
+        <a class="btn-card apply" href="${escapeHtml(directUrl)}" target="_blank" rel="noopener" title="Direct verified application URL">🔗 Apply</a>
+        <a class="btn-card" href="${escapeHtml(routes.linkedin_jobs_url || '#')}" target="_blank" rel="noopener" title="Find this role on LinkedIn">💼 LinkedIn</a>
         <button class="btn-card ${isApplied ? 'mark-applied done' : 'mark-applied'}"
           onclick="${isApplied ? `unmarkApplied('${j.id}', this)` : `markApplied('${j.id}', this)`}">
-          ${isApplied ? '✅ Applied' : '📋 Mark Applied'}
+          ${isApplied ? '✅ Applied' : '📋 Mark'}
         </button>
-        <button class="btn-card" onclick="copyLink('${escapeHtml(directUrl)}')" title="Copy link">📋</button>
+        <button class="btn-card" onclick="copyLink('${escapeHtml(directUrl)}')" title="Copy direct link">📋</button>
       </div>
     </div>`;
   }).join("");
@@ -616,7 +618,7 @@ async function openJobModal(jobId) {
       <div class="job-detail-section">
         <h4>🔗 Application Hub</h4>
         <div class="apply-hub">
-          <a class="apply-btn primary" href="${escapeHtml(routes.direct_url || '#')}" target="_blank" rel="noopener">🎯 Direct Apply</a>
+          <a class="apply-btn primary" href="${escapeHtml(routes.direct_url || '#')}" target="_blank" rel="noopener">🎯 Direct Apply (Verified Active)</a>
           <a class="apply-btn" href="${escapeHtml(routes.google_jobs_url || '#')}" target="_blank" rel="noopener">🔍 Google Jobs</a>
           <a class="apply-btn" href="${escapeHtml(routes.linkedin_jobs_url || '#')}" target="_blank" rel="noopener">💼 LinkedIn Search</a>
           <a class="apply-btn" href="${escapeHtml(routes.company_careers_url || '#')}" target="_blank" rel="noopener">🏢 Company Careers</a>

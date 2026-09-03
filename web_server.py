@@ -92,6 +92,7 @@ class CyberSecWebServer:
         self.app.router.add_get("/api/export/csv", self.handle_api_export_csv)
 
         # Link validation
+        self.app.router.add_post("/api/links/verify-all", self.handle_api_verify_all_links)
         self.app.router.add_post("/api/links/validate", self.handle_api_validate_link)
 
         # Scrape trigger
@@ -105,6 +106,11 @@ class CyberSecWebServer:
         logger.info("Enforcing strict <=14d freshness and fresher/intern filtering...")
         purge_res = self.db.purge_expired_and_experienced_jobs(max_days=14)
         logger.info(f"Startup purge complete: {purge_res}")
+        try:
+            link_res = await self.db.verify_and_purge_broken_links()
+            logger.info(f"Startup link verification complete: {link_res}")
+        except Exception as e:
+            logger.error(f"Error during startup link verification: {e}")
         logger.info("Starting auto-scrape scheduler...")
         self.scheduler.start(interval_hours=4)
 
@@ -400,6 +406,14 @@ class CyberSecWebServer:
         )
 
     # ========== Link Validation ==========
+    async def handle_api_verify_all_links(self, request: web.Request) -> web.Response:
+        """Trigger full live link validation across all jobs in DB."""
+        try:
+            res = await self.db.verify_and_purge_broken_links()
+            return web.json_response(res)
+        except Exception as e:
+            return web.json_response({"error": str(e)}, status=500)
+
     async def handle_api_validate_link(self, request: web.Request) -> web.Response:
         try:
             body = await request.json()

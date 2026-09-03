@@ -283,6 +283,9 @@ body {
 .salary-pill { display: inline-block; background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.3); padding: 2px 8px; border-radius: 12px; font-weight: 600; font-size: 0.72rem; white-space: nowrap; }
 .salary-text { color: #10b981; font-weight: 600; font-size: 0.78rem; }
 
+
+.badge-verified { background: rgba(16,185,129,0.12); color: #10b981; border: 1px solid rgba(16,185,129,0.35); font-size: 0.72rem; font-weight: 600; }
+
 .badge-applied { background: rgba(59,130,246,0.1); color: var(--info); border: 1px solid rgba(59,130,246,0.3); }
 
 .card-location { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px; }
