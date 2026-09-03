@@ -250,6 +250,7 @@ class ScraperEngine:
             description = ""
 
             in_table = False
+            posted_date = None
             for line in lines:
                 line = line.strip()
                 if line.startswith("| Field | Details |"):
@@ -269,6 +270,8 @@ class ScraperEngine:
                         elif field == "Apply":
                             m = re.search(r"\((https?://[^)]+)\)", value)
                             apply_url = m.group(1) if m else value
+                        elif "date" in field.lower():
+                            posted_date = value
                 elif line.startswith("# "):
                     title = line[2:].strip()
 
@@ -297,10 +300,11 @@ class ScraperEngine:
                 company=company,
                 location=location,
                 remote="remote" in location.lower(),
-                job_type="",
+                job_type="internship" if "intern" in title.lower() else "full-time",
                 domain_tags=[],
                 description=description[:5000],
                 apply_url=apply_url,
+                posted_date=posted_date,
             )
         except Exception as e:
             print(f"GitHub markdown parse error: {e}")
@@ -340,8 +344,58 @@ class ScraperEngine:
             if any(p in line_lower for p in skip_patterns):
                 return None
 
-            if re.match(r"^[\U0001f300-\U0001faff]\s+\*{2,}\s+\(\d+\)", line):
+            if re.match(r"^[🌀-🫿]\s+\*{2,}\s+\(\d+\)", line):
                 return None
+
+            # Table row parsing (e.g. | Company | Role | Location | Link | Date |)
+            if line.startswith("|") and line.count("|") >= 4:
+                cols = [c.strip() for c in line.split("|")[1:-1]]
+                if len(cols) >= 3:
+                    # Check if header row
+                    if cols[0].startswith("---") or cols[0].lower() in ("company", "name"):
+                        return None
+
+                    # Extract company
+                    co_raw = cols[0]
+                    co_match = re.search(r"\[([^\]]+)\]", co_raw) or re.search(r"\*\*([^\*]+)\*\*", co_raw)
+                    company = co_match.group(1).strip() if co_match else re.sub(r"<[^>]+>", "", co_raw).strip()
+
+                    # Extract role
+                    role_raw = cols[1]
+                    role_clean = re.sub(r"<[^>]+>", "", role_raw).strip()
+                    title = role_clean
+
+                    # Extract location
+                    location = cols[2] if len(cols) > 2 else "Remote"
+                    location = re.sub(r"<[^>]+>", "", location).strip()
+
+                    # Extract URL
+                    url = ""
+                    url_match = re.search(r'href=["\'](https?://[^"\']+)["\']', line) or re.search(r'\((https?://[^)]+)\)', line)
+                    if url_match:
+                        url = url_match.group(1)
+
+                    # Extract date if available (usually last column)
+                    posted_date = cols[-1] if len(cols) >= 5 else None
+                    if posted_date:
+                        posted_date = re.sub(r"<[^>]+>", "", posted_date).strip()
+
+                    if title and company and url:
+                        is_intern = "intern" in src.name.lower() or "intern" in title.lower()
+                        return JobEntry(
+                            id=f"github_{src.name}_{hash(title+company+location)}",
+                            source=src.name,
+                            source_url=src.url,
+                            title=title,
+                            company=company,
+                            location=location or "Remote",
+                            remote="remote" in location.lower(),
+                            job_type="internship" if is_intern else "full-time",
+                            domain_tags=[],
+                            description="",
+                            apply_url=url,
+                            posted_date=posted_date,
+                        )
 
             md_link_match = re.search(r"\[([^\]]+)\]\(([^)]+)\)", line)
             if md_link_match:
@@ -349,7 +403,7 @@ class ScraperEngine:
                 url = md_link_match.group(2).strip()
                 remaining = line.replace(md_link_match.group(0), "")
             else:
-                bold_match = re.search(r"\*\*([^*]+)\*\*", line)
+                bold_match = re.search(r"\*\*([^\*]+)\*\*", line)
                 if bold_match:
                     title = bold_match.group(1).strip()
                     url_match = re.search(r"https?://\S+", line)
@@ -372,6 +426,7 @@ class ScraperEngine:
             if url.startswith("#") or "github.com/SimplifyJobs/New-Grad-Positions" in url:
                 return None
 
+            is_intern = "intern" in src.name.lower() or "intern" in title.lower()
             return JobEntry(
                 id=f"github_{src.name}_{hash(title+url)}",
                 source=src.name,
@@ -380,7 +435,7 @@ class ScraperEngine:
                 company=company,
                 location=location,
                 remote="remote" in location.lower(),
-                job_type="",
+                job_type="internship" if is_intern else "full-time",
                 domain_tags=[],
                 description="",
                 apply_url=url,

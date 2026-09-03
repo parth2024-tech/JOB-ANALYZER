@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CyberSec Intel Grid v3</title>
+  <title>CyberSec Intel Grid — Fresher & Internship Radar (≤ 14 Days)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
@@ -23,7 +23,7 @@
     <div class="logo-icon">🛡️</div>
     <div>
       <h1 class="brand-title">CyberSec Intel Grid</h1>
-      <p class="brand-sub">Live Cybersecurity Opportunity Feed</p>
+      <p class="brand-sub">Fresher & Internship Radar • ≤ 14 Days • India & Global</p>
     </div>
   </div>
   <div class="header-controls">
@@ -46,23 +46,23 @@
 <div class="kpi-bar">
   <div class="kpi-card">
     <span class="kpi-val" id="kpi-total">—</span>
-    <span class="kpi-label">Total Jobs</span>
+    <span class="kpi-label">Active (≤14 Days)</span>
   </div>
   <div class="kpi-card target">
-    <span class="kpi-val" id="kpi-target">—</span>
-    <span class="kpi-label">Target Matches</span>
+    <span class="kpi-val" id="kpi-internships">—</span>
+    <span class="kpi-label">🎓 Internships</span>
+  </div>
+  <div class="kpi-card">
+    <span class="kpi-val" id="kpi-freshers">—</span>
+    <span class="kpi-label">💼 Entry / Fresher Jobs</span>
   </div>
   <div class="kpi-card india">
     <span class="kpi-val" id="kpi-india">—</span>
-    <span class="kpi-label">🇮🇳 India</span>
+    <span class="kpi-label">🇮🇳 India Roles</span>
   </div>
   <div class="kpi-card globe">
     <span class="kpi-val" id="kpi-globe">—</span>
-    <span class="kpi-label">🌐 Online Interns</span>
-  </div>
-  <div class="kpi-card">
-    <span class="kpi-val" id="kpi-remote">—</span>
-    <span class="kpi-label">Remote %</span>
+    <span class="kpi-label">🌐 Global Roles</span>
   </div>
   <div class="kpi-card">
     <span class="kpi-val" id="kpi-applied">—</span>
@@ -77,10 +77,12 @@
     <div class="filter-group">
       <label class="filter-label">Scope</label>
       <div class="tab-pills" id="scope-tabs">
-        <button class="pill active" data-val="all" onclick="setFilter('location_scope', 'all', this, 'scope-tabs')">All</button>
-        <button class="pill target-pill" data-val="target" onclick="setFilter('location_scope', 'target', this, 'scope-tabs')">🎯 Target</button>
-        <button class="pill" data-val="india" onclick="setFilter('location_scope', 'india', this, 'scope-tabs')">🇮🇳 India</button>
-        <button class="pill" data-val="global_remote_intern" onclick="setFilter('location_scope', 'global_remote_intern', this, 'scope-tabs')">🌐 Remote Intern</button>
+        <button class="pill active" data-val="all" onclick="setFilter('location_scope', 'all', this, 'scope-tabs')">🌐 All World</button>
+        <button class="pill" data-val="india" onclick="setFilter('location_scope', 'india', this, 'scope-tabs')">🇮🇳 India (All Cities)</button>
+        <button class="pill" data-val="global" onclick="setFilter('location_scope', 'global', this, 'scope-tabs')">🌍 Global (Outside India)</button>
+        <button class="pill" data-val="remote" onclick="setFilter('location_scope', 'remote', this, 'scope-tabs')">💻 Remote / WFH</button>
+        <button class="pill" data-val="internship" onclick="setFilter('location_scope', 'internship', this, 'scope-tabs')">🎓 Internships Only</button>
+        <button class="pill" data-val="fresher" onclick="setFilter('location_scope', 'fresher', this, 'scope-tabs')">💼 Fresher Jobs Only</button>
       </div>
     </div>
 
@@ -99,12 +101,11 @@
     <div class="filter-group">
       <label class="filter-label">Level</label>
       <div class="tab-pills" id="seniority-tabs">
-        <button class="pill active" data-val="" onclick="setFilter('seniority', '', this, 'seniority-tabs')">All</button>
-        <button class="pill" data-val="junior" onclick="setFilter('seniority', 'junior', this, 'seniority-tabs')">🟢 Junior</button>
-        <button class="pill" data-val="mid" onclick="setFilter('seniority', 'mid', this, 'seniority-tabs')">🔵 Mid</button>
-        <button class="pill" data-val="senior" onclick="setFilter('seniority', 'senior', this, 'seniority-tabs')">🟡 Senior</button>
-        <button class="pill" data-val="lead" onclick="setFilter('seniority', 'lead', this, 'seniority-tabs')">🟠 Lead</button>
-        <button class="pill" data-val="manager" onclick="setFilter('seniority', 'manager', this, 'seniority-tabs')">🔴 Manager</button>
+        <button class="pill active" data-val="" onclick="setFilter('seniority', '', this, 'seniority-tabs')">All Levels</button>
+        <button class="pill" data-val="internship" onclick="setFilter('seniority', 'internship', this, 'seniority-tabs')">🎓 Internship</button>
+        <button class="pill" data-val="fresher" onclick="setFilter('seniority', 'fresher', this, 'seniority-tabs')">🟢 Entry-Level</button>
+        <button class="pill" data-val="junior" onclick="setFilter('seniority', 'junior', this, 'seniority-tabs')">🔵 Junior</button>
+        <button class="pill" data-val="associate" onclick="setFilter('seniority', 'associate', this, 'seniority-tabs')">🟡 Associate</button>
       </div>
     </div>
 

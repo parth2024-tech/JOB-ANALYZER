@@ -102,6 +102,9 @@ class CyberSecWebServer:
         self.app.on_shutdown.append(self._on_shutdown)
 
     async def _on_startup(self, app):
+        logger.info("Enforcing strict <=14d freshness and fresher/intern filtering...")
+        purge_res = self.db.purge_expired_and_experienced_jobs(max_days=14)
+        logger.info(f"Startup purge complete: {purge_res}")
         logger.info("Starting auto-scrape scheduler...")
         self.scheduler.start(interval_hours=4)
 
@@ -467,6 +470,11 @@ class CyberSecWebServer:
             self.last_scrape_stats = {"error": str(e)}
         finally:
             self.is_scraping = False
+            # Enforce 14-day freshness & fresher/intern criteria after every scrape
+            try:
+                self.db.purge_expired_and_experienced_jobs(max_days=14)
+            except Exception as e:
+                logger.error(f"Error during post-scrape purge: {e}")
             # Invalidate caches again after data changes
             _stats_cache.clear()
             _sources_cache.clear()

@@ -2,7 +2,8 @@ import sqlite3
 import json
 import re
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+import dateutil.parser
 from pathlib import Path
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass, asdict
@@ -324,6 +325,111 @@ SKILLS_KEYWORDS = [
 ]
 
 
+
+
+# =========================================================================
+# STRICT FRESHER & INTERNSHIP FILTERING (<= 14 DAYS MAX AGE)
+# =========================================================================
+
+FRESHER_INTERN_INCLUSIONS = [
+    r'\b(intern|internship|interns|internships)\b',
+    r'\b(fresher|freshers)\b',
+    r'\b(trainee|trainees)\b',
+    r'\b(entry[\s-]level)\b',
+    r'\b(junior|jr\.?)\b',
+    r'\b(associate)\b',
+    r'\b(graduate|graduates|new\s*grad|new\s*grads)\b',
+    r'\b(co[\s-]?op)\b',
+    r'\b(apprentice|apprenticeship)\b',
+    r'\b(campus|early\s*career)\b',
+    r'\b(level[\s-]1|l1|tier[\s-]1|t1|analyst\s*i\b|engineer\s*i\b)\b',
+    r'\b(werkstudent\w*)\b',
+]
+
+EXCLUDE_EXPERIENCED_PATTERNS = [
+    r'\b(senior|sr\.?)\b',
+    r'\b(lead|principal|staff)\b',
+    r'\b(manager|director|head\s*of|vp|vice\s*president|chief|ciso)\b',
+    r'\b(architect)\b',
+    r'\b(level\s*[2-9]|tier\s*[2-9]|ii|iii|iv|v|l2|l3)\b',
+    r'\b([3-9]\+|\d{2}\+)\s*(?:years?|yrs?)\b',
+    r'\b(?:minimum|at\s*least)\s*[3-9]\s*(?:years?|yrs?)\b',
+]
+
+
+def is_within_max_age(posted_date: Optional[str], discovered_at: Optional[str], max_days: int = 14) -> bool:
+    """Check if a job was posted or discovered within max_days (default 14 days / 2 weeks)."""
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=max_days)
+
+    # Check posted_date first
+    if posted_date:
+        val_str = str(posted_date).strip()
+        if val_str:
+            try:
+                if val_str.isdigit():
+                    dt = datetime.fromtimestamp(int(val_str), tz=timezone.utc)
+                else:
+                    dt = dateutil.parser.parse(val_str)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                if dt < cutoff:
+                    return False
+                return True
+            except Exception:
+                pass
+
+    # Check discovered_at
+    if discovered_at:
+        try:
+            dt = dateutil.parser.parse(str(discovered_at).strip())
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt >= cutoff
+        except Exception:
+            pass
+
+    return True
+
+
+def is_fresher_or_intern(title: str, description: str = "", job_type: str = "") -> bool:
+    """Strictly verify that job is for freshers or internships only."""
+    if not title:
+        return False
+    t = title.lower().strip()
+    d = (description or "").lower()
+
+    # Reject experienced roles immediately
+    for exc in EXCLUDE_EXPERIENCED_PATTERNS:
+        if re.search(exc, t):
+            return False
+
+    # Positive match in job_type
+    if (job_type or "").lower() == "internship":
+        return True
+
+    # Positive match in title
+    for inc in FRESHER_INTERN_INCLUSIONS:
+        if re.search(inc, t):
+            return True
+
+    # Explicit fresher keywords in description
+    desc_fresher = [
+        r'\b(fresher|freshers)\b',
+        r'\b0[\s-]1\s*(?:years?|yrs?)\b',
+        r'\b0[\s-]2\s*(?:years?|yrs?)\b',
+        r'\bno\s*experience\s*required\b',
+        r'\bentry[\s-]level\b',
+        r'\brecent\s*graduates?\b',
+        r'\bgraduates?\s*(?:can\s*apply|welcome)\b',
+        r'\bcollege\s*students?\b',
+    ]
+    for df in desc_fresher:
+        if re.search(df, d):
+            return True
+
+    return False
+
 def is_strictly_cyber_job(title: str, description: str = "") -> bool:
     if not title:
         return False
@@ -355,24 +461,25 @@ def is_india_location(location: Optional[str]) -> bool:
     return False
 
 
-def is_target_opportunity(location: Optional[str], remote: Any, job_type: Optional[str], title: str = "") -> bool:
-    if title and not is_strictly_cyber_job(title):
+def is_target_opportunity(location: Optional[str], remote: Any, job_type: Optional[str], title: str = "", description: str = "") -> bool:
+    if not is_strictly_cyber_job(title, description):
         return False
-    if is_india_location(location):
-        return True
-    loc_str = (location or "").lower()
-    is_rem = bool(remote) or ("remote" in loc_str or "anywhere" in loc_str or "online" in loc_str)
-    is_intern = (job_type or "").lower() == "internship" or "intern" in (title or "").lower()
-    return is_rem and is_intern
+    if not is_fresher_or_intern(title, description, job_type or ""):
+        return False
+    return True
 
 
-def detect_seniority(title: str) -> str:
+def detect_seniority(title: str, job_type: str = "") -> str:
     t = title.lower()
-    for level, patterns in SENIORITY_PATTERNS.items():
-        for p in patterns:
-            if re.search(p, t):
-                return level
-    return "mid"
+    if (job_type or "").lower() == "internship" or re.search(r'\b(intern|internship|werkstudent\w*|co[\s-]?op|apprentice)\b', t):
+        return "internship"
+    if re.search(r'\b(fresher|entry[\s-]level|trainee|graduate|campus|new\s*grad)\b', t):
+        return "fresher"
+    if re.search(r'\b(junior|jr\.?)\b', t):
+        return "junior"
+    if re.search(r'\b(associate|analyst\s*i\b|engineer\s*i\b|level[\s-]1|l1|t1)\b', t):
+        return "associate"
+    return "fresher"
 
 
 def extract_skills(description: str) -> List[str]:
@@ -585,12 +692,16 @@ class JobDatabase:
     def insert_job(self, job: JobEntry, keywords: List[str]) -> bool:
         if not is_strictly_cyber_job(job.title, job.description):
             return False
+        if not is_fresher_or_intern(job.title, job.description, job.job_type):
+            return False
+        if not is_within_max_age(job.posted_date, job.discovered_at, max_days=14):
+            return False
 
         job.discovered_at = datetime.utcnow().isoformat()
         job.hash = self._generate_hash(job)
         job.job_type = self._classify_job_type(job.title, job.description)
         job.domain_tags = self._extract_domain_tags(job.title + " " + job.description, keywords)
-        job.seniority_level = detect_seniority(job.title)
+        job.seniority_level = detect_seniority(job.title, job.job_type)
         skills = extract_skills(job.description)
         job.skills_required = json.dumps(skills)
 
@@ -685,7 +796,7 @@ class JobDatabase:
 
             data["is_india"] = is_ind
             data["is_target_match"] = is_tgt
-            data["target_badge"] = "🇮🇳 India • Office / WFH" if is_ind else ("🌐 Global • Online Internship" if is_tgt else None)
+            data["target_badge"] = "🇮🇳 India • Fresher / Intern" if is_ind else "🌐 Global • Fresher / Intern"
             data["application_routes"] = generate_application_routes(tit, comp, data.get("apply_url"))
             data["apply_url"] = data["application_routes"]["direct_url"]
 
@@ -848,12 +959,16 @@ class JobDatabase:
         india_sql = f"(({india_sql_conditions}) AND location NOT LIKE '%Indiana%' AND location NOT LIKE '%Indianapolis%')"
         remote_intern_sql = "((job_type = 'internship' OR title LIKE '%intern%') AND (remote = 1 OR location LIKE '%Remote%' OR location LIKE '%Online%'))"
 
-        if target_only or location_scope == "target":
-            conditions.append(f"({india_sql} OR {remote_intern_sql})")
-        elif location_scope == "india":
+        if location_scope == "india":
             conditions.append(india_sql)
-        elif location_scope == "global_remote_intern":
-            conditions.append(f"(NOT {india_sql} AND {remote_intern_sql})")
+        elif location_scope == "global":
+            conditions.append(f"NOT {india_sql}")
+        elif location_scope == "remote":
+            conditions.append("(remote = 1 OR location LIKE '%Remote%' OR location LIKE '%Online%')")
+        elif location_scope == "internship":
+            conditions.append("(job_type = 'internship' OR seniority_level = 'internship')")
+        elif location_scope == "fresher":
+            conditions.append("(job_type != 'internship' AND seniority_level != 'internship')")
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -896,7 +1011,7 @@ class JobDatabase:
 
                 item["is_india"] = is_ind
                 item["is_target_match"] = is_tgt
-                item["target_badge"] = "🇮🇳 India • Office / WFH" if is_ind else ("🌐 Global • Online Internship" if is_tgt else None)
+                item["target_badge"] = "🇮🇳 India • Fresher / Intern" if is_ind else "🌐 Global • Fresher / Intern"
                 item["application_routes"] = generate_application_routes(tit, comp, item.get("apply_url"))
                 item["apply_url"] = item["application_routes"]["direct_url"]
                 item["applied"] = item["id"] in applied_ids
@@ -968,14 +1083,18 @@ class JobDatabase:
             domain_counts = self.get_domain_counts()
             top_domains = {d["tag"]: d["count"] for d in domain_counts[:8]}
 
+            global_count = total - india_count
+            freshers_count = total - internships
+
             return {
                 "total": total,
                 "internships": internships,
+                "freshers_count": freshers_count,
                 "remote": remote_count,
                 "remote_pct": round((remote_count / total) * 100, 1) if total > 0 else 0,
-                "target_count": target_count,
+                "target_count": total,
                 "india_count": india_count,
-                "global_remote_intern_count": global_remote_intern_count,
+                "global_count": global_count,
                 "by_type": by_type,
                 "by_seniority": by_seniority,
                 "by_company_category": by_company_category,
@@ -1038,6 +1157,34 @@ class JobDatabase:
                     conn.execute(f"UPDATE jobs SET {', '.join(updates)} WHERE id = ?", tuple(params))
                     updated += 1
         return {"updated": updated, "total": len(rows)}
+
+
+    def purge_expired_and_experienced_jobs(self, max_days: int = 14) -> Dict[str, int]:
+        """Purge jobs that are older than max_days (2 weeks) or not for fresher/intern."""
+        purged = 0
+        with self._conn() as conn:
+            rows = conn.execute("SELECT id, title, description, job_type, posted_date, discovered_at FROM jobs").fetchall()
+            to_delete = []
+            for r in rows:
+                if not is_fresher_or_intern(r["title"], r["description"] or "", r["job_type"] or ""):
+                    to_delete.append(r["id"])
+                elif not is_within_max_age(r["posted_date"], r["discovered_at"], max_days=max_days):
+                    to_delete.append(r["id"])
+
+            if to_delete:
+                chunk_size = 400
+                for i in range(0, len(to_delete), chunk_size):
+                    chunk = to_delete[i:i + chunk_size]
+                    placeholders = ",".join("?" * len(chunk))
+                    conn.execute(f"DELETE FROM jobs WHERE id IN ({placeholders})", tuple(chunk))
+                purged = len(to_delete)
+                try:
+                    conn.execute("INSERT INTO jobs_fts(jobs_fts) VALUES('rebuild')")
+                except Exception:
+                    pass
+
+        self.vacuum()
+        return {"purged": purged, "remaining": len(rows) - purged}
 
     def vacuum(self) -> None:
         with self._conn() as conn:

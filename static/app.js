@@ -328,6 +328,19 @@ async function loadJobs() {
 }
 
 
+
+function getAgeDays(dateStr) {
+  if (!dateStr) return 0;
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - d;
+    return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+  } catch(e) {
+    return 0;
+  }
+}
+
 function getCategoryInfo(cat) {
   const map = {
     vendor: { icon: "🏭", label: "Vendor", cls: "badge-cat-vendor" },
@@ -346,9 +359,11 @@ function renderJobCards(jobs) {
   grid.innerHTML = jobs.map(j => {
     const routes = j.application_routes || {};
     const directUrl = routes.direct_url || j.apply_url || "#";
-        const seniority = j.seniority_level || "mid";
+        const seniority = j.seniority_level || "junior";
     const catInfo = getCategoryInfo(j.company_category);
-    const seniorityLabel = { junior: "🟢 Junior", mid: "🔵 Mid", senior: "🟡 Senior", lead: "🟠 Lead", manager: "🔴 Manager" }[seniority] || seniority;
+    const seniorityLabel = { internship: "🎓 Internship", fresher: "🟢 Entry-Level", junior: "🔵 Junior", associate: "🟡 Associate", mid: "🔵 Junior" }[seniority] || seniority;
+    const ageDays = getAgeDays(j.discovered_at || j.posted_date);
+    const freshnessBadge = ageDays <= 0 ? "⏱️ Today" : ageDays === 1 ? "⏱️ Yesterday" : `⏱️ ${ageDays}d ago`;
     const skills = (j.skills_required || []).slice(0, 4);
     const tags = (j.domain_tags || []).slice(0, 4);
     const isApplied = j.applied || state.appliedIds.has(j.id);
@@ -367,8 +382,9 @@ function renderJobCards(jobs) {
       </div>
 
       <div class="card-meta">
-        <span class="badge badge-type">${j.job_type || 'full-time'}</span>
+        <span class="badge badge-type">${j.job_type === 'internship' ? '🎓 Internship' : '💼 Fresher Job'}</span>
         <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>
+        <span class="badge badge-freshness">${freshnessBadge}</span>
         <span class="badge ${catInfo.cls}">${catInfo.icon} ${catInfo.label}</span>
         ${j.salary_display ? `<span class="badge badge-salary">💰 ${escapeHtml(j.salary_display)}</span>` : ''}
         ${j.remote ? '<span class="badge badge-remote">🌍 Remote</span>' : ''}
@@ -579,7 +595,7 @@ async function openJobModal(jobId) {
     const skills = j.skills_required || [];
     const tags = j.domain_tags || [];
     const seniority = j.seniority_level || "mid";
-    const seniorityLabel = { junior: "🟢 Junior", mid: "🔵 Mid", senior: "🟡 Senior", lead: "🟠 Lead", manager: "🔴 Manager" }[seniority] || seniority;
+    const seniorityLabel = { internship: "🎓 Internship", fresher: "🟢 Entry-Level", junior: "🔵 Junior", associate: "🟡 Associate", mid: "🔵 Junior", senior: "🟡 Experienced" }[seniority] || seniority;
 
     document.getElementById("modal-title").textContent = j.title;
     document.getElementById("modal-company").textContent = `${j.company} • ${j.location} • ${seniorityLabel}`;

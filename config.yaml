@@ -21,6 +21,12 @@ sources:
     - name: "SimplifyJobs New Grad Positions"
       url: "https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/README.md"
       type: "markdown_list"
+    - name: "SimplifyJobs Cybersecurity Internships"
+      url: "https://raw.githubusercontent.com/SimplifyJobs/Summer2025-Internships/dev/README.md"
+      type: "markdown_list"
+    - name: "Ouckah Cybersecurity Internships"
+      url: "https://raw.githubusercontent.com/Ouckah/Summer2025-Internships/master/README.md"
+      type: "markdown_list"
 
   json_apis:
     - name: "ArbeitNow Jobs API"
@@ -200,7 +206,11 @@ scheduler:
 # User-specific location & role criteria
 preferences:
   target_profile:
-    # Any location in India: accepts either company office (onsite) or work from home (remote)
-    india_wfh_or_office: true
-    # Outside India: accepts ONLY online/remote internships
-    outside_india_remote_internships_only: true
+    # Strictly fresher and internship opportunities only (no experienced roles)
+    fresher_and_internship_only: true
+    # Strictly posted within maximum 2 weeks (14 days)
+    max_age_days: 14
+    # India: Any location in India (Office or Work From Home)
+    india_all_locations: true
+    # Worldwide: Opportunities all over the world (Remote or Onsite)
+    global_all_locations: true
