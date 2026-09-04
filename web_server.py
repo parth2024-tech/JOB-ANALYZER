@@ -522,9 +522,11 @@ def start_server(host: str = "0.0.0.0", port: int = 8080,
 
 if __name__ == "__main__":
     import argparse
+    import os
+    env_port = int(os.environ.get("PORT", 8080))
     parser = argparse.ArgumentParser(description="CyberSec Tactical Job Dashboard v3")
     parser.add_argument("--host", default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--port", type=int, default=env_port)
     parser.add_argument("--db", default="jobs.db")
     parser.add_argument("--config", default="config.yaml")
     args = parser.parse_args()
