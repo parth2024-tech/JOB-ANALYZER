@@ -16,13 +16,12 @@ import asyncio
 import csv
 import io
 import json
-import os
 import sys
-import time
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, Set
-from aiohttp import web, WSMsgType
+
 import aiohttp
+from aiohttp import WSMsgType, web
 from cachetools import TTLCache
 from loguru import logger
 
@@ -30,8 +29,8 @@ BASE_DIR = Path(__file__).parent.resolve()
 sys.path.insert(0, str(BASE_DIR))
 
 from database import JobDatabase
-from scraper import ScraperEngine
 from scheduler import JobScheduler
+from scraper import ScraperEngine
 
 # Simple in-memory caches
 _stats_cache = TTLCache(maxsize=1, ttl=30)
@@ -50,9 +49,9 @@ class CyberSecWebServer:
         self.app = web.Application(middlewares=[self._cors_middleware, self._cache_control_middleware])
         self.is_scraping = False
         self.last_scrape_stats = {}
-        self.last_scrape_at: Optional[str] = None
+        self.last_scrape_at: str | None = None
         # WebSocket subscriber set
-        self._ws_clients: Set[web.WebSocketResponse] = set()
+        self._ws_clients: set[web.WebSocketResponse] = set()
         # Scheduler
         self.scheduler = JobScheduler(self)
         self._setup_routes()
@@ -200,7 +199,7 @@ class CyberSecWebServer:
             min_salary_lpa = None
 
         remote_val = params.get("remote", "").lower().strip()
-        remote: Optional[bool] = None
+        remote: bool | None = None
         if remote_val in ("1", "true", "yes"):
             remote = True
         elif remote_val in ("0", "false", "no"):
@@ -477,7 +476,7 @@ class CyberSecWebServer:
             async with ScraperEngine(self.config_path, self.db) as scraper:
                 counts = await scraper.scrape_all()
                 self.last_scrape_stats = counts
-                self.last_scrape_at = __import__("datetime").datetime.utcnow().isoformat()
+                self.last_scrape_at = datetime.now(timezone.utc).isoformat()
                 logger.info(f"Scrape finished: {counts}")
         except Exception as e:
             logger.error(f"Error during scrape: {e}")
@@ -506,11 +505,11 @@ class CyberSecWebServer:
 
     def run(self):
         print(f"\n{'='*60}")
-        print(f"🛡️  CyberSec Job Scraper v3 — Tactical Web Dashboard")
+        print("🛡️  CyberSec Job Scraper v3 — Tactical Web Dashboard")
         print(f"📡  http://{self.host}:{self.port}")
-        print(f"🔄  Auto-scrape: every 4 hours")
+        print("🔄  Auto-scrape: every 4 hours")
         print(f"📊  WebSocket: ws://{self.host}:{self.port}/ws")
-        print(f"Press Ctrl+C to stop.")
+        print("Press Ctrl+C to stop.")
         print(f"{'='*60}\n")
         web.run_app(self.app, host=self.host, port=self.port, access_log=None)
 

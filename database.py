@@ -1,16 +1,16 @@
-import sqlite3
+import asyncio
+import hashlib
 import json
 import re
+import sqlite3
 import urllib.parse
-import asyncio
-from datetime import datetime, timezone, timedelta
-import dateutil.parser
-from pathlib import Path
-from typing import Optional, List, Dict, Any
-from dataclasses import dataclass, asdict
 from contextlib import contextmanager
-import hashlib
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
 
+import dateutil.parser
 
 # =========================================================================
 # SALARY EXTRACTION & NORMALIZATION
@@ -238,13 +238,13 @@ class JobEntry:
     location: str
     remote: bool
     job_type: str  # "full-time", "internship", "contract", "part-time"
-    domain_tags: List[str]
-    salary_min: Optional[int] = None
-    salary_max: Optional[int] = None
+    domain_tags: list[str]
+    salary_min: int | None = None
+    salary_max: int | None = None
     salary_currency: str = "USD"
     description: str = ""
     apply_url: str = ""
-    posted_date: Optional[str] = None
+    posted_date: str | None = None
     discovered_at: str = ""
     hash: str = ""
     seniority_level: str = ""   # junior / mid / senior / lead / manager
@@ -358,7 +358,7 @@ EXCLUDE_EXPERIENCED_PATTERNS = [
 ]
 
 
-def is_within_max_age(posted_date: Optional[str], discovered_at: Optional[str], max_days: int = 14) -> bool:
+def is_within_max_age(posted_date: str | None, discovered_at: str | None, max_days: int = 14) -> bool:
     """Check if a job was posted or discovered within max_days (default 14 days / 2 weeks)."""
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=max_days)
@@ -447,7 +447,7 @@ def is_strictly_cyber_job(title: str, description: str = "") -> bool:
     return False
 
 
-def is_india_location(location: Optional[str]) -> bool:
+def is_india_location(location: str | None) -> bool:
     if not location:
         return False
     loc = location.lower().strip()
@@ -462,7 +462,7 @@ def is_india_location(location: Optional[str]) -> bool:
     return False
 
 
-def is_target_opportunity(location: Optional[str], remote: Any, job_type: Optional[str], title: str = "", description: str = "") -> bool:
+def is_target_opportunity(location: str | None, remote: Any, job_type: str | None, title: str = "", description: str = "") -> bool:
     if not is_strictly_cyber_job(title, description):
         return False
     if not is_fresher_or_intern(title, description, job_type or ""):
@@ -483,7 +483,7 @@ def detect_seniority(title: str, job_type: str = "") -> str:
     return "fresher"
 
 
-def extract_skills(description: str) -> List[str]:
+def extract_skills(description: str) -> list[str]:
     if not description:
         return []
     text = description.lower()
@@ -494,7 +494,7 @@ def extract_skills(description: str) -> List[str]:
     return found[:15]
 
 
-def sanitize_apply_url(url: Optional[str], title: str = "", company: str = "") -> str:
+def sanitize_apply_url(url: str | None, title: str = "", company: str = "") -> str:
     if not url or not url.strip() or url.strip() == "#":
         q = urllib.parse.quote_plus(f"{company} {title} careers security".strip())
         return f"https://www.google.com/search?q={q}"
@@ -517,7 +517,7 @@ def sanitize_apply_url(url: Optional[str], title: str = "", company: str = "") -
     return clean_url
 
 
-def generate_application_routes(title: str, company: str, apply_url: Optional[str]) -> Dict[str, str]:
+def generate_application_routes(title: str, company: str, apply_url: str | None) -> dict[str, str]:
     direct = sanitize_apply_url(apply_url, title, company)
     t_clean = re.sub(r"\(.*?\)", "", title or "").replace("at " + company, "").strip()
     c_clean = company if company and company != "Unknown" else ""
@@ -681,7 +681,7 @@ class JobDatabase:
         return "full-time"
 
     @staticmethod
-    def _extract_domain_tags(text: str, keywords: List[str]) -> List[str]:
+    def _extract_domain_tags(text: str, keywords: list[str]) -> list[str]:
         text_lower = text.lower()
         found = []
         for kw in keywords:
@@ -690,7 +690,7 @@ class JobDatabase:
                 found.append(kw)
         return found
 
-    def insert_job(self, job: JobEntry, keywords: List[str]) -> bool:
+    def insert_job(self, job: JobEntry, keywords: list[str]) -> bool:
         if not is_strictly_cyber_job(job.title, job.description):
             return False
         if not is_fresher_or_intern(job.title, job.description, job.job_type):
@@ -698,7 +698,7 @@ class JobDatabase:
         if not is_within_max_age(job.posted_date, job.discovered_at, max_days=14):
             return False
 
-        job.discovered_at = datetime.utcnow().isoformat()
+        job.discovered_at = datetime.now(timezone.utc).isoformat()
         job.hash = self._generate_hash(job)
         job.job_type = self._classify_job_type(job.title, job.description)
         job.domain_tags = self._extract_domain_tags(job.title + " " + job.description, keywords)
@@ -738,19 +738,16 @@ class JobDatabase:
 
     def log_scrape_run(self, source: str, new_jobs: int, total_fetched: int, status: str = "ok", error: str = "") -> None:
         with self._conn() as conn:
-            conn.execute("""
-                INSERT INTO scrape_runs (source, run_at, new_jobs, total_fetched, status, error)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (source, datetime.utcnow().isoformat(), new_jobs, total_fetched, status, error))
+            conn.execute("""\n                INSERT INTO scrape_runs (source, run_at, new_jobs, total_fetched, status, error)\n                VALUES (?, ?, ?, ?, ?, ?)\n            """, (source, datetime.now(timezone.utc).isoformat(), new_jobs, total_fetched, status, error))
 
-    def get_scrape_history(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_scrape_history(self, limit: int = 100) -> list[dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("""
                 SELECT * FROM scrape_runs ORDER BY run_at DESC LIMIT ?
             """, (limit,)).fetchall()
             return [dict(r) for r in rows]
 
-    def get_new_jobs(self, since: str, limit: int = 100) -> List[Dict[str, Any]]:
+    def get_new_jobs(self, since: str, limit: int = 100) -> list[dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("""
                 SELECT * FROM jobs WHERE discovered_at > ? ORDER BY discovered_at DESC LIMIT ?
@@ -761,7 +758,7 @@ class JobDatabase:
         with self._conn() as conn:
             return conn.execute("SELECT COUNT(*) FROM jobs WHERE discovered_at > ?", (since,)).fetchone()[0]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         with self._conn() as conn:
             total = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
             internships = conn.execute("SELECT COUNT(*) FROM jobs WHERE job_type = 'internship'").fetchone()[0]
@@ -772,7 +769,7 @@ class JobDatabase:
                 "by_type": {r["job_type"]: r["c"] for r in by_type},
             }
 
-    def get_job_by_id(self, job_id: str) -> Optional[Dict[str, Any]]:
+    def get_job_by_id(self, job_id: str) -> dict[str, Any] | None:
         with self._conn() as conn:
             row = conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
             if not row:
@@ -806,7 +803,7 @@ class JobDatabase:
             data["applied"] = dict(applied_row) if applied_row else None
             return data
 
-    def get_sources_stats(self) -> List[Dict[str, Any]]:
+    def get_sources_stats(self) -> list[dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("""
                 SELECT source, COUNT(*) as count, MAX(discovered_at) as last_seen
@@ -824,7 +821,7 @@ class JobDatabase:
                 for r in rows
             ]
 
-    def get_search_suggestions(self, q: str, limit: int = 10) -> Dict[str, List[str]]:
+    def get_search_suggestions(self, q: str, limit: int = 10) -> dict[str, list[str]]:
         q_pattern = f"%{q}%"
         with self._conn() as conn:
             title_rows = conn.execute(
@@ -841,10 +838,7 @@ class JobDatabase:
     def mark_applied(self, job_id: str, notes: str = "") -> bool:
         with self._conn() as conn:
             try:
-                conn.execute("""
-                    INSERT OR REPLACE INTO applications (job_id, applied_at, notes, status)
-                    VALUES (?, ?, ?, 'applied')
-                """, (job_id, datetime.utcnow().isoformat(), notes))
+                conn.execute("""\n                    INSERT OR REPLACE INTO applications (job_id, applied_at, notes, status)\n                    VALUES (?, ?, ?, 'applied')\n                """, (job_id, datetime.now(timezone.utc).isoformat(), notes))
                 return True
             except Exception:
                 return False
@@ -854,7 +848,7 @@ class JobDatabase:
             conn.execute("DELETE FROM applications WHERE job_id = ?", (job_id,))
             return True
 
-    def get_applications(self) -> List[Dict[str, Any]]:
+    def get_applications(self) -> list[dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("""
                 SELECT j.*, a.applied_at, a.notes, a.status as app_status
@@ -886,12 +880,9 @@ class JobDatabase:
 
     def mark_alert_sent(self, fingerprint: str) -> None:
         with self._conn() as conn:
-            conn.execute("""
-                INSERT OR IGNORE INTO sent_alerts (fingerprint, sent_at)
-                VALUES (?, ?)
-            """, (fingerprint, datetime.utcnow().isoformat()))
+            conn.execute("""\n                INSERT OR IGNORE INTO sent_alerts (fingerprint, sent_at)\n                VALUES (?, ?)\n            """, (fingerprint, datetime.now(timezone.utc).isoformat()))
 
-    def get_jobs_history_by_day(self, days: int = 30) -> List[Dict[str, Any]]:
+    def get_jobs_history_by_day(self, days: int = 30) -> list[dict[str, Any]]:
         """Get job discovery counts grouped by day for the timeline chart."""
         with self._conn() as conn:
             rows = conn.execute("""
@@ -908,17 +899,17 @@ class JobDatabase:
         search: str = "",
         job_type: str = "",
         domain: str = "",
-        remote: Optional[bool] = None,
+        remote: bool | None = None,
         source: str = "",
         seniority: str = "",
         company_category: str = "",
-        min_salary_lpa: Optional[float] = None,
+        min_salary_lpa: float | None = None,
         sort_by: str = "newest",
         location_scope: str = "all",
         target_only: bool = False,
         page: int = 1,
         page_size: int = 24
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         conditions = []
         params = []
 
@@ -1027,7 +1018,7 @@ class JobDatabase:
                 "total_pages": total_pages,
             }
 
-    def get_detailed_stats(self) -> Dict[str, Any]:
+    def get_detailed_stats(self) -> dict[str, Any]:
         with self._conn() as conn:
             total = conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
             if total == 0:
@@ -1107,7 +1098,7 @@ class JobDatabase:
                 "applied_count": applied_count
             }
 
-    def get_domain_counts(self) -> List[Dict[str, Any]]:
+    def get_domain_counts(self) -> list[dict[str, Any]]:
         tag_counts = {}
         with self._conn() as conn:
             rows = conn.execute("SELECT domain_tags FROM jobs WHERE domain_tags IS NOT NULL AND domain_tags != '[]'").fetchall()
@@ -1123,7 +1114,7 @@ class JobDatabase:
         return [{"tag": k, "count": v} for k, v in sorted_tags]
 
 
-    def backfill_enrichment(self) -> Dict[str, int]:
+    def backfill_enrichment(self) -> dict[str, int]:
         """Backfill existing jobs with company category and salary extraction."""
         updated = 0
         with self._conn() as conn:
@@ -1161,7 +1152,7 @@ class JobDatabase:
 
 
 
-    async def verify_and_purge_broken_links(self) -> Dict[str, Any]:
+    async def verify_and_purge_broken_links(self) -> dict[str, Any]:
         """Asynchronously test all job links and purge broken/closed ones."""
         import aiohttp
         headers = {
@@ -1215,16 +1206,14 @@ class JobDatabase:
         verified = len(rows) - len(purged_ids)
         return {"total": len(rows), "verified": verified, "purged": len(purged_ids)}
 
-    def purge_expired_and_experienced_jobs(self, max_days: int = 14) -> Dict[str, int]:
+    def purge_expired_and_experienced_jobs(self, max_days: int = 14) -> dict[str, int]:
         """Purge jobs that are older than max_days (2 weeks) or not for fresher/intern."""
         purged = 0
         with self._conn() as conn:
             rows = conn.execute("SELECT id, title, description, job_type, posted_date, discovered_at FROM jobs").fetchall()
             to_delete = []
             for r in rows:
-                if not is_fresher_or_intern(r["title"], r["description"] or "", r["job_type"] or ""):
-                    to_delete.append(r["id"])
-                elif not is_within_max_age(r["posted_date"], r["discovered_at"], max_days=max_days):
+                if not is_fresher_or_intern(r["title"], r["description"] or "", r["job_type"] or "") or not is_within_max_age(r["posted_date"], r["discovered_at"], max_days=max_days):
                     to_delete.append(r["id"])
 
             if to_delete:
@@ -1253,3 +1242,88 @@ class JobDatabase:
 if __name__ == "__main__":
     db = JobDatabase("test_jobs.db")
     print("Database initialized:", db.get_stats())
+
+# ============ Source Health Monitoring ============
+from dataclasses import dataclass
+
+
+@dataclass
+class SourceHealth:
+    """Track health metrics for a source."""
+    name: str
+    total_runs: int = 0
+    successful_runs: int = 0
+    failed_runs: int = 0
+    total_jobs_found: int = 0
+    total_new_jobs: int = 0
+    last_run_at: str = ""
+    last_success_at: str = ""
+    last_error: str = ""
+    consecutive_failures: int = 0
+    avg_latency_ms: float = 0.0
+    
+    @property
+    def success_rate(self) -> float:
+        if self.total_runs == 0:
+            return 1.0
+        return self.successful_runs / self.total_runs
+    
+    @property
+    def is_healthy(self) -> bool:
+        if self.total_runs < 3:
+            return True  # Not enough data
+        return self.success_rate >= 0.5 and self.consecutive_failures < 3
+
+
+class SourceHealthTracker:
+    """Track and report health of all sources."""
+    def __init__(self, db):
+        self.db = db
+        self._health: dict[str, SourceHealth] = {}
+    
+    def record_run(self, source_name: str, success: bool, jobs_found: int, new_jobs: int, latency_ms: float, error: str = ""):
+        """Record a source run result."""
+        if source_name not in self._health:
+            self._health[source_name] = SourceHealth(name=source_name)
+        
+        health = self._health[source_name]
+        health.total_runs += 1
+        health.total_jobs_found += jobs_found
+        health.total_new_jobs += new_jobs
+        health.last_run_at = datetime.now(timezone.utc).isoformat()
+        
+        if success:
+            health.successful_runs += 1
+            health.last_success_at = health.last_run_at
+            health.consecutive_failures = 0
+            health.last_error = ""
+        else:
+            health.failed_runs += 1
+            health.consecutive_failures += 1
+            health.last_error = error
+        
+        # Update rolling average latency
+        health.avg_latency_ms = (health.avg_latency_ms * (health.total_runs - 1) + latency_ms) / health.total_runs
+    
+    def get_health_report(self) -> list[dict]:
+        """Get health report for all sources."""
+        return [
+            {
+                "name": h.name,
+                "total_runs": h.total_runs,
+                "success_rate": round(h.success_rate * 100, 1),
+                "total_jobs_found": h.total_jobs_found,
+                "total_new_jobs": h.total_new_jobs,
+                "last_run_at": h.last_run_at,
+                "last_success_at": h.last_success_at,
+                "consecutive_failures": h.consecutive_failures,
+                "avg_latency_ms": round(h.avg_latency_ms, 1),
+                "is_healthy": h.is_healthy,
+                "last_error": h.last_error
+            }
+            for h in sorted(self._health.values(), key=lambda x: -x.total_runs)
+        ]
+    
+    def get_unhealthy_sources(self) -> list[str]:
+        """Get list of unhealthy source names."""
+        return [h.name for h in self._health.values() if not h.is_healthy]

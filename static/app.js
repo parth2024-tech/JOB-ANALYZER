@@ -94,7 +94,7 @@ async function pollNewJobs() {
     const res = await fetch(`/api/jobs/new?since=${encodeURIComponent(state.lastTimestamp)}&limit=1`);
     if (!res.ok) return;
     const data = await res.json();
-    if (data.new_count > 0 && !document.getElementById("ws-banner").classList.contains("hidden") === false) {
+    if (data.new_count > 0 && document.getElementById("ws-banner").classList.contains("hidden")) {
       showNewJobsBanner(data.new_count);
     }
   } catch(e) {}

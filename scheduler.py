@@ -4,8 +4,9 @@ APScheduler-based background scheduler for automatic scraping every 4 hours.
 Used by the web server for continuous auto-discovery.
 """
 import asyncio
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from datetime import datetime, timedelta, timezone
+from typing import Any
+
 from loguru import logger
 
 
@@ -13,10 +14,10 @@ class JobScheduler:
     def __init__(self, web_server):
         self.server = web_server
         self.interval_hours = 4
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._running = False
-        self.last_run_at: Optional[str] = None
-        self.next_run_at: Optional[str] = None
+        self.last_run_at: str | None = None
+        self.next_run_at: str | None = None
         self._run_count = 0
 
     def start(self, interval_hours: int = 4):
@@ -35,7 +36,7 @@ class JobScheduler:
         logger.info("Scheduler stopped.")
 
     def _update_next_run(self):
-        next_dt = datetime.utcnow() + timedelta(hours=self.interval_hours)
+        next_dt = datetime.now(timezone.utc) + timedelta(hours=self.interval_hours)
         self.next_run_at = next_dt.isoformat()
 
     async def _scheduler_loop(self):
@@ -45,7 +46,7 @@ class JobScheduler:
         while self._running:
             if not self.server.is_scraping:
                 logger.info(f"Scheduler triggered auto-scrape #{self._run_count + 1}")
-                self.last_run_at = datetime.utcnow().isoformat()
+                self.last_run_at = datetime.now(timezone.utc).isoformat()
                 asyncio.create_task(self.server._execute_scrape())
                 self._run_count += 1
             else:
@@ -59,7 +60,7 @@ class JobScheduler:
                     return
                 await asyncio.sleep(60)
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         return {
             "running": self._running,
             "interval_hours": self.interval_hours,

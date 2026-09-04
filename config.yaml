@@ -38,9 +38,7 @@ sources:
     - name: "Remotive API"
       url: "https://remotive.com/api/remote-jobs?category=Security"
       type: "json_api"
-    - name: "USAJobs Cybersecurity"
-      url: "https://data.usajobs.gov/api/search?Keyword=cybersecurity&PositionTitle=security&ResultsPerPage=50"
-      type: "json_api"
+    # USAJobs removed - requires paid API key subscription (401 Unauthorized without)
 
   ats_boards:
     # --- EXISTING ---

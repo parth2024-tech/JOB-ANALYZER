@@ -1,9 +1,10 @@
-import os
 import asyncio
 import hashlib
-import aiohttp
-from typing import List, Dict, Any
+import os
 from dataclasses import dataclass
+from typing import Any
+
+import aiohttp
 from loguru import logger
 
 
@@ -35,7 +36,7 @@ class TelegramNotifier:
             await asyncio.sleep(0.5)  # Avoid flooding
         return success
 
-    def _chunk_message(self, text: str) -> List[str]:
+    def _chunk_message(self, text: str) -> list[str]:
         """Split text into <=4000 char chunks at paragraph boundaries."""
         if len(text) <= self.MAX_MSG_LEN:
             return [text]
@@ -82,12 +83,12 @@ class TelegramNotifier:
                     await asyncio.sleep(2 ** attempt)
         return False
 
-    def _fingerprint(self, jobs: List[Dict[str, Any]]) -> str:
+    def _fingerprint(self, jobs: list[dict[str, Any]]) -> str:
         """SHA-1 fingerprint of job IDs for dedup check."""
         ids = sorted(j.get("id", "") for j in jobs)
         return hashlib.sha1("|".join(ids).encode()).hexdigest()[:16]
 
-    def format_india_alert(self, jobs: List[Dict[str, Any]]) -> str:
+    def format_india_alert(self, jobs: list[dict[str, Any]]) -> str:
         lines = ["🇮🇳 <b>India Cybersecurity Opportunities</b>", ""]
         for i, job in enumerate(jobs[:8], 1):
             title = job.get("title", "Unknown")
@@ -111,7 +112,7 @@ class TelegramNotifier:
             lines.append(f"\n... and {len(jobs) - 8} more India jobs!")
         return "\n".join(lines)
 
-    def format_global_intern_alert(self, jobs: List[Dict[str, Any]]) -> str:
+    def format_global_intern_alert(self, jobs: list[dict[str, Any]]) -> str:
         lines = ["🌐 <b>Global Online Cybersecurity Internships</b>", ""]
         for i, job in enumerate(jobs[:8], 1):
             title = job.get("title", "Unknown")
@@ -129,7 +130,7 @@ class TelegramNotifier:
             lines.append(f"\n... and {len(jobs) - 8} more remote internships!")
         return "\n".join(lines)
 
-    def format_job_alert(self, jobs: List[Dict[str, Any]]) -> str:
+    def format_job_alert(self, jobs: list[dict[str, Any]]) -> str:
         """Format general jobs into a Telegram message (handles all types)."""
         if not jobs:
             return ""
@@ -172,7 +173,7 @@ class TelegramNotifier:
         lines.append(f"\n📊 Total new: {len(jobs)}")
         return "\n".join(lines)
 
-    async def send_job_alert(self, jobs: List[Dict[str, Any]], db=None) -> bool:
+    async def send_job_alert(self, jobs: list[dict[str, Any]], db=None) -> bool:
         """Send formatted job alert with dedup check and India-priority split."""
         if not jobs:
             return True
@@ -215,7 +216,7 @@ class TelegramNotifier:
             db.mark_alert_sent(fingerprint)
         return success
 
-    async def send_summary(self, stats: Dict[str, Any], source_counts: Dict[str, int]) -> bool:
+    async def send_summary(self, stats: dict[str, Any], source_counts: dict[str, int]) -> bool:
         total = stats.get("total", 0)
         target = stats.get("target_count", 0)
         india = stats.get("india_count", 0)

@@ -15,21 +15,19 @@ Usage:
     python main.py --test    # Test run without Telegram
 """
 
-import asyncio
 import argparse
-import os
-import sys
+import asyncio
 import signal
-from datetime import datetime, timedelta
+import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Dict
 
 # Add current directory to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from scraper import ScraperEngine
 from database import JobDatabase
 from notifier import TelegramNotifier, load_config
+from scraper import ScraperEngine
 
 
 class CyberSecJobScraper:
@@ -48,10 +46,10 @@ class CyberSecJobScraper:
                 print("⚠️  No Telegram bot token - running in test mode")
                 self.test_mode = True
 
-    async def run_once(self) -> Dict[str, int]:
+    async def run_once(self) -> dict[str, int]:
         """Run one complete scraping cycle."""
         print(f"\n{'='*60}")
-        print(f"🔍 CyberSec Job Scraper - {datetime.utcnow().isoformat()}")
+        print(f"🔍 CyberSec Job Scraper - {datetime.now(timezone.utc).isoformat()}")
         print(f"{'='*60}")
 
         async with ScraperEngine(self.config_path, self.db) as scraper:
@@ -59,7 +57,7 @@ class CyberSecJobScraper:
 
         stats = self.db.get_stats()
 
-        print(f"\n📊 Run Complete - Stats:")
+        print("\n📊 Run Complete - Stats:")
         print(f"   Total Jobs: {stats['total']}")
         print(f"   Internships: {stats['internships']}")
         for jtype, count in stats['by_type'].items():
@@ -68,7 +66,7 @@ class CyberSecJobScraper:
         # Send notifications
         if self.notifier and not self.test_mode:
             # Get new jobs since last run (approximate: last 2 hours)
-            since = (datetime.utcnow() - timedelta(hours=2)).isoformat()
+            since = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
             new_jobs = self.db.get_new_jobs(since, limit=50)
 
             if new_jobs:
@@ -118,7 +116,7 @@ async def async_main(args):
 
     if args.stats:
         stats = scraper.db.get_stats()
-        print(f"\n📊 Database Statistics:")
+        print("\n📊 Database Statistics:")
         print(f"   Total Jobs: {stats['total']}")
         print(f"   Internships: {stats['internships']}")
         for jtype, count in stats['by_type'].items():

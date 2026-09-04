@@ -1,18 +1,21 @@
 import asyncio
-import aiohttp
-import feedparser
-import re
 import json
 import random
-from datetime import datetime
-from typing import List, Dict, Any, Optional, Tuple
-from bs4 import BeautifulSoup
+import re
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
+
+import aiohttp
+import feedparser
 import yaml
-from pathlib import Path
+from bs4 import BeautifulSoup
 
-from database import JobEntry, JobDatabase, is_strictly_cyber_job, detect_seniority, extract_skills
-
+from database import (
+    JobDatabase,
+    JobEntry,
+    is_strictly_cyber_job,
+)
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -31,15 +34,15 @@ class SourceConfig:
 
 
 class ScraperEngine:
-    def __init__(self, config_path: str = "config.yaml", db: Optional[JobDatabase] = None):
+    def __init__(self, config_path: str = "config.yaml", db: JobDatabase | None = None):
         self.config = self._load_config(config_path)
         self.db = db or JobDatabase()
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.session: aiohttp.ClientSession | None = None
         self.keywords = self.config.get("keywords", {}).get("domains", [])
         # Semaphore: max 8 concurrent requests
         self._sem = asyncio.Semaphore(8)
 
-    def _load_config(self, path: str) -> Dict:
+    def _load_config(self, path: str) -> dict:
         with open(path) as f:
             return yaml.safe_load(f)
 
@@ -57,7 +60,7 @@ class ScraperEngine:
         if self.session:
             await self.session.close()
 
-    async def fetch(self, url: str, retries: int = 3) -> Optional[str]:
+    async def fetch(self, url: str, retries: int = 3) -> str | None:
         """Fetch URL with exponential-backoff retries and UA rotation."""
         async with self._sem:
             for attempt in range(retries):
@@ -82,7 +85,7 @@ class ScraperEngine:
                     await asyncio.sleep(2 ** attempt)  # exponential backoff
         return None
 
-    async def scrape_all(self) -> Dict[str, int]:
+    async def scrape_all(self) -> dict[str, int]:
         """Run ALL scrapers concurrently and return counts per source."""
         tasks = []
         sources_cfg = self.config.get("sources", {})
@@ -122,9 +125,11 @@ class ScraperEngine:
 
         return results
 
-    async def _run_source(self, method, src: SourceConfig) -> Dict[str, int]:
+    async def _run_source(self, method, src: SourceConfig) -> dict[str, int]:
         """Run a single source scraper, log results to DB."""
-        start = datetime.utcnow().isoformat()
+        import time
+        start_time = time.time()
+        start = datetime.now(timezone.utc).isoformat()
         new_jobs = 0
         total_fetched = 0
         status = "ok"
@@ -141,14 +146,20 @@ class ScraperEngine:
             error = str(e)
             print(f"[ERROR] {src.name}: {e}")
         finally:
+            latency_ms = (time.time() - start_time) * 1000
             try:
                 self.db.log_scrape_run(src.name, new_jobs, total_fetched, status, error)
+                # Record health metrics
+                if not hasattr(self, '_health_tracker'):
+                    from database import SourceHealthTracker
+                    self._health_tracker = SourceHealthTracker(self.db)
+                self._health_tracker.record_run(src.name, status == "ok", total_fetched, new_jobs, latency_ms, error)
             except Exception:
                 pass
         return {src.name: new_jobs}
 
     # ============ RSS Scraper ============
-    async def scrape_rss(self, src: SourceConfig) -> Tuple[int, int]:
+    async def scrape_rss(self, src: SourceConfig) -> tuple[int, int]:
         print(f"[RSS] Fetching {src.name}...")
         content = await self.fetch(src.url)
         if not content:
@@ -166,7 +177,7 @@ class ScraperEngine:
         print(f"[RSS] {src.name}: {count}/{total} new cyber jobs")
         return count, total
 
-    def _parse_rss_entry(self, entry, src: SourceConfig) -> Optional[JobEntry]:
+    def _parse_rss_entry(self, entry, src: SourceConfig) -> JobEntry | None:
         try:
             title = entry.get("title", "").strip()
             link = entry.get("link", "")
@@ -210,7 +221,7 @@ class ScraperEngine:
             return None
 
     # ============ GitHub API Directory Scraper ============
-    async def scrape_github_api_dir(self, src: SourceConfig) -> Tuple[int, int]:
+    async def scrape_github_api_dir(self, src: SourceConfig) -> tuple[int, int]:
         print(f"[GitHub API] Fetching {src.name}...")
         content = await self.fetch(src.url)
         if not content:
@@ -242,7 +253,7 @@ class ScraperEngine:
         print(f"[GitHub API] {src.name}: {count}/{total} new cyber jobs")
         return count, total
 
-    def _parse_github_job_markdown(self, content: str, src: SourceConfig, filename: str) -> Optional[JobEntry]:
+    def _parse_github_job_markdown(self, content: str, src: SourceConfig, filename: str) -> JobEntry | None:
         try:
             lines = content.strip().split("\n")
             title = company = apply_url = ""
@@ -311,7 +322,7 @@ class ScraperEngine:
             return None
 
     # ============ GitHub Markdown Scraper ============
-    async def scrape_github_markdown(self, src: SourceConfig) -> Tuple[int, int]:
+    async def scrape_github_markdown(self, src: SourceConfig) -> tuple[int, int]:
         print(f"[GitHub] Fetching {src.name}...")
         content = await self.fetch(src.url)
         if not content:
@@ -332,7 +343,7 @@ class ScraperEngine:
         print(f"[GitHub] {src.name}: {count} new cyber jobs")
         return count, total
 
-    def _parse_markdown_line(self, line: str, src: SourceConfig) -> Optional[JobEntry]:
+    def _parse_markdown_line(self, line: str, src: SourceConfig) -> JobEntry | None:
         try:
             line_lower = line.lower()
             skip_patterns = [
@@ -351,23 +362,29 @@ class ScraperEngine:
             if line.startswith("|") and line.count("|") >= 4:
                 cols = [c.strip() for c in line.split("|")[1:-1]]
                 if len(cols) >= 3:
-                    # Check if header row
-                    if cols[0].startswith("---") or cols[0].lower() in ("company", "name"):
+                    # Check if header row - handle markdown bold syntax
+                    first_col_clean = re.sub(r"[*_`~]", "", cols[0]).strip().lower()
+                    if cols[0].startswith("---") or first_col_clean in ("company", "name"):
                         return None
 
                     # Extract company
                     co_raw = cols[0]
                     co_match = re.search(r"\[([^\]]+)\]", co_raw) or re.search(r"\*\*([^\*]+)\*\*", co_raw)
                     company = co_match.group(1).strip() if co_match else re.sub(r"<[^>]+>", "", co_raw).strip()
+                    
+                    # Track last valid company for continuation rows (local variable)
+                    if not hasattr(self, '_last_table_company_local'):
+                        self._last_table_company_local = None
+                    
                     if company in ("↳", "->", "»", "–", "-") or len(company) <= 1:
                         if "oraclecloud.com" in line and "egug" in line:
                             company = "American Express"
-                        elif getattr(self, "_last_table_company", None):
-                            company = self._last_table_company
+                        elif self._last_table_company_local:
+                            company = self._last_table_company_local
                         else:
                             company = "Enterprise"
                     else:
-                        self._last_table_company = company
+                        self._last_table_company_local = company
 
                     # Extract role
                     role_raw = cols[1]
@@ -456,7 +473,7 @@ class ScraperEngine:
             return None
 
     # ============ JSON API Scraper ============
-    async def scrape_json_api(self, src: SourceConfig) -> Tuple[int, int]:
+    async def scrape_json_api(self, src: SourceConfig) -> tuple[int, int]:
         print(f"[JSON API] Fetching {src.name}...")
         content = await self.fetch(src.url)
         if not content:
@@ -479,7 +496,7 @@ class ScraperEngine:
         print(f"[JSON API] {src.name}: {count}/{total} new cyber jobs")
         return count, total
 
-    def _extract_jobs_from_json(self, data: Any, api_type: str) -> List[Dict]:
+    def _extract_jobs_from_json(self, data: Any, api_type: str) -> list[dict]:
         if isinstance(data, list):
             return data
         for key in ["jobs", "data", "results", "items", "positions", "SearchResult", "search_result"]:
@@ -494,7 +511,7 @@ class ScraperEngine:
                             return val[subkey]
         return [data] if isinstance(data, dict) else []
 
-    def _normalize_json_job(self, job_data: Dict, src: SourceConfig) -> Optional[JobEntry]:
+    def _normalize_json_job(self, job_data: dict, src: SourceConfig) -> JobEntry | None:
         try:
             title = job_data.get("title", job_data.get("name", job_data.get("position",
                     job_data.get("MatchedObjectDescriptor", {}).get("PositionTitle", ""))))
@@ -548,7 +565,7 @@ class ScraperEngine:
             return None
 
     # ============ ATS Board Scraper (Greenhouse etc) ============
-    async def scrape_ats_board(self, src: SourceConfig) -> Tuple[int, int]:
+    async def scrape_ats_board(self, src: SourceConfig) -> tuple[int, int]:
         print(f"[ATS] Fetching {src.name}...")
         content = await self.fetch(src.url)
         if not content:
@@ -614,7 +631,7 @@ class ScraperEngine:
 
 
     # ============ Lever ATS Scraper ============
-    async def scrape_lever_board(self, src: SourceConfig) -> Tuple[int, int]:
+    async def scrape_lever_board(self, src: SourceConfig) -> tuple[int, int]:
         """Scrape Lever ATS job board by company slug.
         API: GET https://api.lever.co/v0/postings/{slug}?mode=json
         """
@@ -646,7 +663,7 @@ class ScraperEngine:
         print(f"[Lever] {src.name}: {count}/{total} new cyber jobs")
         return count, total
 
-    def _parse_lever_posting(self, posting: Dict, src: SourceConfig) -> Optional[JobEntry]:
+    def _parse_lever_posting(self, posting: dict, src: SourceConfig) -> JobEntry | None:
         """Parse a Lever API posting into a JobEntry."""
         try:
             title = posting.get("text", "").strip()
@@ -712,7 +729,7 @@ class ScraperEngine:
 
 
     # ============ Playwright / Naukri Headless Scraper ============
-    async def scrape_naukri_playwright(self, src: SourceConfig) -> Tuple[int, int]:
+    async def scrape_naukri_playwright(self, src: SourceConfig) -> tuple[int, int]:
         """Use Playwright to scrape Naukri job listings (bypasses reCAPTCHA)."""
         try:
             from playwright.async_api import async_playwright
@@ -851,3 +868,88 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+# ============ Source Health Monitoring ============
+from dataclasses import dataclass
+
+
+@dataclass
+class SourceHealth:
+    """Track health metrics for a source."""
+    name: str
+    total_runs: int = 0
+    successful_runs: int = 0
+    failed_runs: int = 0
+    total_jobs_found: int = 0
+    total_new_jobs: int = 0
+    last_run_at: str = ""
+    last_success_at: str = ""
+    last_error: str = ""
+    consecutive_failures: int = 0
+    avg_latency_ms: float = 0.0
+    
+    @property
+    def success_rate(self) -> float:
+        if self.total_runs == 0:
+            return 1.0
+        return self.successful_runs / self.total_runs
+    
+    @property
+    def is_healthy(self) -> bool:
+        if self.total_runs < 3:
+            return True  # Not enough data
+        return self.success_rate >= 0.5 and self.consecutive_failures < 3
+
+
+class SourceHealthTracker:
+    """Track and report health of all sources."""
+    def __init__(self, db):
+        self.db = db
+        self._health: dict[str, SourceHealth] = {}
+    
+    def record_run(self, source_name: str, success: bool, jobs_found: int, new_jobs: int, latency_ms: float, error: str = ""):
+        """Record a source run result."""
+        if source_name not in self._health:
+            self._health[source_name] = SourceHealth(name=source_name)
+        
+        health = self._health[source_name]
+        health.total_runs += 1
+        health.total_jobs_found += jobs_found
+        health.total_new_jobs += new_jobs
+        health.last_run_at = datetime.now(timezone.utc).isoformat()
+        
+        if success:
+            health.successful_runs += 1
+            health.last_success_at = health.last_run_at
+            health.consecutive_failures = 0
+            health.last_error = ""
+        else:
+            health.failed_runs += 1
+            health.consecutive_failures += 1
+            health.last_error = error
+        
+        # Update rolling average latency
+        health.avg_latency_ms = (health.avg_latency_ms * (health.total_runs - 1) + latency_ms) / health.total_runs
+    
+    def get_health_report(self) -> list[dict]:
+        """Get health report for all sources."""
+        return [
+            {
+                "name": h.name,
+                "total_runs": h.total_runs,
+                "success_rate": round(h.success_rate * 100, 1),
+                "total_jobs_found": h.total_jobs_found,
+                "total_new_jobs": h.total_new_jobs,
+                "last_run_at": h.last_run_at,
+                "last_success_at": h.last_success_at,
+                "consecutive_failures": h.consecutive_failures,
+                "avg_latency_ms": round(h.avg_latency_ms, 1),
+                "is_healthy": h.is_healthy,
+                "last_error": h.last_error
+            }
+            for h in sorted(self._health.values(), key=lambda x: -x.total_runs)
+        ]
+    
+    def get_unhealthy_sources(self) -> list[str]:
+        """Get list of unhealthy source names."""
+        return [h.name for h in self._health.values() if not h.is_healthy]
