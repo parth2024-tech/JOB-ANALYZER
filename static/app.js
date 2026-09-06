@@ -1104,6 +1104,17 @@ function renderKanban(jobs) {
 
     const card = document.createElement("div");
     card.className = "kanban-card";
+    card.setAttribute("draggable", "true");
+    card.id = `kcard-${j.id}`;
+    card.ondragstart = (e) => {
+      e.dataTransfer.setData("text/plain", j.id);
+      card.classList.add("dragging");
+      playCyberSound('click');
+    };
+    card.ondragend = () => {
+      card.classList.remove("dragging");
+    };
+
     card.innerHTML = `
       <div class="kanban-card-title">${escapeHtml(j.title)}</div>
       <div class="kanban-card-company">${escapeHtml(j.company)} • ${escapeHtml(j.location || 'Remote')}</div>
@@ -1287,4 +1298,142 @@ function switchInterviewTab(tab) {
     </div>
   `).join("");
 }
+
+// =========================================================================
+// 🔊 WEB AUDIO API SYNTHESIZER (ZERO ASSETS / 100% FREE)
+// =========================================================================
+let _audioCtx = null;
+function getAudioContext() {
+  if (!_audioCtx && (window.AudioContext || window.webkitAudioContext)) {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return _audioCtx;
+}
+
+function playCyberSound(type = 'click') {
+  if (localStorage.getItem("soundEnabled") === "false") return;
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    const now = ctx.currentTime;
+    if (type === 'click') {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(440, now + 0.04);
+      gain.gain.setValueAtTime(0.08, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
+      osc.start(now);
+      osc.stop(now + 0.04);
+    } else if (type === 'apply') {
+      osc.type = "triangle";
+      osc.frequency.setValueAtTime(440, now);
+      osc.frequency.exponentialRampToValueAtTime(880, now + 0.12);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      osc.start(now);
+      osc.stop(now + 0.14);
+    } else if (type === 'pitch') {
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(523.25, now);
+      osc.frequency.setValueAtTime(659.25, now + 0.06);
+      osc.frequency.setValueAtTime(783.99, now + 0.12);
+      gain.gain.setValueAtTime(0.1, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.start(now);
+      osc.stop(now + 0.22);
+    }
+  } catch(e) {}
+}
+
+function toggleSound() {
+  const current = localStorage.getItem("soundEnabled") !== "false";
+  const next = !current;
+  localStorage.setItem("soundEnabled", next ? "true" : "false");
+  const btn = document.getElementById("sound-toggle");
+  if (btn) btn.textContent = next ? "🔊" : "🔇";
+  if (next) playCyberSound('apply');
+  showToast(next ? "🔊 Audio FX Enabled" : "🔇 Audio FX Muted");
+}
+
+// =========================================================================
+// 🔀 KANBAN DRAG AND DROP HANDLERS
+// =========================================================================
+function handleDragOver(e) {
+  e.preventDefault();
+  const col = e.currentTarget;
+  col.classList.add("drag-over");
+}
+
+function handleDragLeave(e) {
+  const col = e.currentTarget;
+  col.classList.remove("drag-over");
+}
+
+function handleDrop(e, targetStage) {
+  e.preventDefault();
+  const col = e.currentTarget;
+  col.classList.remove("drag-over");
+  const jobId = e.dataTransfer.getData("text/plain");
+  if (jobId) {
+    changeJobStage(jobId, targetStage);
+    playCyberSound('apply');
+  }
+}
+
+// =========================================================================
+// 📄 RESUME DRAG-AND-DROP PARSER
+// =========================================================================
+function handleResumeDrop(e) {
+  e.preventDefault();
+  const dropzone = document.getElementById("resume-dropzone");
+  if (dropzone) dropzone.classList.remove("dragover");
+  const file = e.dataTransfer.files[0];
+  if (file) parseResumeFile(file);
+}
+
+function handleResumeFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) parseResumeFile(file);
+}
+
+function parseResumeFile(file) {
+  showToast(`📄 Parsing ${file.name}...`);
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    const content = evt.target.result || "";
+    extractAndApplySkillsFromText(content);
+  };
+  reader.readAsText(file);
+}
+
+function extractAndApplySkillsFromText(text) {
+  const textLow = text.toLowerCase();
+  const dictionary = [
+    "linux", "python", "wireshark", "nmap", "burp suite", "splunk", "owasp",
+    "tcp/ip", "siem", "soc", "kali linux", "iso 27001", "incident response", "git",
+    "cloud security", "aws", "azure", "docker", "kubernetes", "sql", "cryptography",
+    "reverse engineering", "malware", "vulnerability management", "mitre", "yara",
+    "bash", "powershell", "firewall", "edr", "xdr", "identity", "iam", "zero trust",
+    "network security", "active directory", "nessus", "metasploit", "snort", "suricata"
+  ];
+  const detected = dictionary.filter(skill => textLow.includes(skill));
+  if (!detected.length) {
+    showToast("⚠️ No direct cybersecurity keywords identified in file", 3000);
+    return;
+  }
+  state.userSkills = [...new Set([...state.userSkills, ...detected])];
+  localStorage.setItem("userSkills", JSON.stringify(state.userSkills));
+  document.getElementById("user-skills-input").value = state.userSkills.join(", ");
+  renderQuickSkillsChips();
+  playCyberSound('pitch');
+  showToast(`🎯 Auto-extracted ${detected.length} skills from resume!`, 3000);
+}
+
 

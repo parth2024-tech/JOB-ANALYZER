@@ -39,6 +39,7 @@
     </div>
     <button class="icon-btn action-pill-btn" onclick="toggleProfileModal()" title="Resume & Skills Keyword Matcher">🎯 Matcher</button>
     <button class="icon-btn action-pill-btn" onclick="toggleInterviewModal()" title="Cybersecurity Interview Technical Cheat Sheet">💡 Prep</button>
+    <button id="sound-toggle" class="icon-btn" onclick="toggleSound()" title="Toggle Cyber Audio FX">🔊</button>
     <button id="theme-toggle" class="icon-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌙</button>
     <button class="icon-btn" onclick="toggleSourcesDrawer()" title="Source Health">📡</button>
     <button class="icon-btn" onclick="toggleShortcutsModal()" title="Keyboard Shortcuts (?)">⌨️</button>
@@ -255,35 +256,35 @@
           <span class="kanban-col-title">📌 Wishlist / Saved</span>
           <span class="kanban-badge" id="kb-count-saved">0</span>
         </div>
-        <div class="kanban-col-body" id="kb-col-saved"></div>
+        <div class="kanban-col-body" id="kb-col-saved" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'saved')"></div>
       </div>
       <div class="kanban-column" data-status="applied">
         <div class="kanban-col-header">
           <span class="kanban-col-title">📨 Applied</span>
           <span class="kanban-badge" id="kb-count-applied">0</span>
         </div>
-        <div class="kanban-col-body" id="kb-col-applied"></div>
+        <div class="kanban-col-body" id="kb-col-applied" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'applied')"></div>
       </div>
       <div class="kanban-column" data-status="interviewing">
         <div class="kanban-col-header">
           <span class="kanban-col-title">💬 Interviewing</span>
           <span class="kanban-badge" id="kb-count-interviewing">0</span>
         </div>
-        <div class="kanban-col-body" id="kb-col-interviewing"></div>
+        <div class="kanban-col-body" id="kb-col-interviewing" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'interviewing')"></div>
       </div>
       <div class="kanban-column" data-status="offer">
         <div class="kanban-col-header">
           <span class="kanban-col-title">🎉 Offer</span>
           <span class="kanban-badge" id="kb-count-offer">0</span>
         </div>
-        <div class="kanban-col-body" id="kb-col-offer"></div>
+        <div class="kanban-col-body" id="kb-col-offer" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'offer')"></div>
       </div>
       <div class="kanban-column" data-status="rejected">
         <div class="kanban-col-header">
           <span class="kanban-col-title">❌ Rejected</span>
           <span class="kanban-badge" id="kb-count-rejected">0</span>
         </div>
-        <div class="kanban-col-body" id="kb-col-rejected"></div>
+        <div class="kanban-col-body" id="kb-col-rejected" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'rejected')"></div>
       </div>
     </div>
   </div>
@@ -393,8 +394,17 @@
       <button onclick="toggleProfileModal()" class="close-btn">✕</button>
     </div>
     <div class="modal-body">
-      <p class="helper-text">Enter your technical skills or paste your resume summary (comma-separated or freeform):</p>
-      <textarea id="user-skills-input" class="pitch-textarea" rows="5" placeholder="e.g. Linux, Python, Wireshark, Burp Suite, Nmap, Splunk, OWASP Top 10, TCP/IP, SIEM, SOC, Kali Linux, ISO 27001..."></textarea>
+      <div class="resume-dropzone" id="resume-dropzone" onclick="document.getElementById('resume-file-input').click()"
+           ondragover="event.preventDefault(); this.classList.add('dragover');"
+           ondragleave="this.classList.remove('dragover');"
+           ondrop="handleResumeDrop(event)">
+        <span class="drop-icon">📄</span>
+        <span class="drop-text">Drag & drop your Resume (.txt / .md / .json) or click to browse</span>
+        <input type="file" id="resume-file-input" accept=".txt,.md,.json,.pdf" style="display:none" onchange="handleResumeFileSelect(event)" />
+      </div>
+
+      <p class="helper-text">Or paste your technical skills / resume text directly below:</p>
+      <textarea id="user-skills-input" class="pitch-textarea" rows="4" placeholder="e.g. Linux, Python, Wireshark, Burp Suite, Nmap, Splunk, OWASP Top 10, TCP/IP, SIEM, SOC, Kali Linux, ISO 27001..."></textarea>
       
       <div class="quick-chips-section">
         <span class="filter-label">Quick Add Cyber Skills:</span>

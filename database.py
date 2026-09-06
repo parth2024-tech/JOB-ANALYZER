@@ -52,11 +52,17 @@ _USD_SINGLE_PAT = re.compile(
     r'(?:per\s+(?:year|yr|annum)|/\s*yr|annual)?',
     re.IGNORECASE
 )
+_USD_HOURLY_PAT = re.compile(
+    r'(?:\$|USD\s*)(\d{1,3}(?:\.\d+)?)\s*(?:[-–to]+\s*(?:\$|USD\s*)?(\d{1,3}(?:\.\d+)?))?\s*'
+    r'(?:/\s*hr\b|/\s*hour\b|per\s+hour\b|\bhourly\b)',
+    re.IGNORECASE
+)
 
 
 def _clean_num(s: str) -> float:
     """Remove commas, parse float."""
     return float(s.replace(",", "").strip())
+
 
 
 def extract_salary(text: str) -> dict:
@@ -136,6 +142,24 @@ def extract_salary(text: str) -> dict:
             "salary_inr_lpa_min": round(val_inr_lpa, 1),
             "salary_inr_lpa_max": round(val_inr_lpa, 1),
             "salary_display": f"${val_k}k (~₹{val_inr_lpa:.0f}L/yr)",
+            "currency": "USD"
+        }
+
+    # 6. USD hourly: "$25/hr", "$30 - $45/hour"
+    m = _USD_HOURLY_PAT.search(text)
+    if m:
+        lo = _clean_num(m.group(1))
+        hi = _clean_num(m.group(2)) if m.group(2) else lo
+        # 2080 hours per year standard
+        lo_ann = lo * 2080
+        hi_ann = hi * 2080
+        lo_lpa = (lo_ann * USD_TO_INR) / INR_LPA_DIVISOR
+        hi_lpa = (hi_ann * USD_TO_INR) / INR_LPA_DIVISOR
+        disp = f"${lo:.0f}–${hi:.0f}/hr" if lo != hi else f"${lo:.0f}/hr"
+        return {
+            "salary_inr_lpa_min": round(lo_lpa, 1),
+            "salary_inr_lpa_max": round(hi_lpa, 1),
+            "salary_display": f"{disp} (~₹{lo_lpa:.0f}L–₹{hi_lpa:.0f}L/yr)",
             "currency": "USD"
         }
 
@@ -662,8 +686,12 @@ class JobDatabase:
 
     @contextmanager
     def _conn(self):
-        conn = sqlite3.connect(self.db_path, timeout=10)
+        conn = sqlite3.connect(self.db_path, timeout=15)
         conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+        conn.execute("PRAGMA cache_size = -64000")
+        conn.execute("PRAGMA temp_store = MEMORY")
         try:
             yield conn
             conn.commit()
