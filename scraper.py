@@ -124,6 +124,18 @@ class ScraperEngine:
             sr_src = SourceConfig(name=src["name"], url=src["slug"], type="smartrecruiters")
             tasks.append(self._run_source(self.scrape_smartrecruiters_board, sr_src))
 
+        for src in sources_cfg.get("bamboohr_boards", []):
+            bhr_src = SourceConfig(name=src["name"], url=src["slug"], type="bamboohr")
+            tasks.append(self._run_source(self.scrape_bamboohr_board, bhr_src))
+
+        for src in sources_cfg.get("workable_boards", []):
+            wk_src = SourceConfig(name=src["name"], url=src["slug"], type="workable")
+            tasks.append(self._run_source(self.scrape_workable_board, wk_src))
+
+        for src in sources_cfg.get("recruitee_boards", []):
+            rt_src = SourceConfig(name=src["name"], url=src["slug"], type="recruitee")
+            tasks.append(self._run_source(self.scrape_recruitee_board, rt_src))
+
         results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
         results = {}
@@ -528,23 +540,27 @@ class ScraperEngine:
             if isinstance(title, dict):
                 title = str(title)
 
-            company = job_data.get("company", job_data.get("company_name",
-                       job_data.get("MatchedObjectDescriptor", {}).get("OrganizationName", src.name)))
+            company = job_data.get("company", job_data.get("company_name", job_data.get("companyName",
+                       job_data.get("MatchedObjectDescriptor", {}).get("OrganizationName", src.name))))
 
             location_raw = job_data.get("location", job_data.get("location_name",
-                           job_data.get("MatchedObjectDescriptor", {}).get("PositionLocationDisplay", "Remote")))
+                           job_data.get("locationRestrictions",
+                           job_data.get("MatchedObjectDescriptor", {}).get("PositionLocationDisplay", "Remote"))))
             if isinstance(location_raw, dict):
                 location = location_raw.get("name", "Remote")
+            elif isinstance(location_raw, list):
+                location = ", ".join(str(x) for x in location_raw) if location_raw else "Remote"
             else:
                 location = location_raw or "Remote"
 
             url = job_data.get("apply_url", job_data.get("url", job_data.get("absolute_url",
+                  job_data.get("applicationLink",
                   job_data.get("MatchedObjectDescriptor", {}).get("ApplyURI", [""])[0]
-                  if isinstance(job_data.get("MatchedObjectDescriptor", {}).get("ApplyURI"), list) else "")))
+                  if isinstance(job_data.get("MatchedObjectDescriptor", {}).get("ApplyURI"), list) else ""))))
 
-            description = job_data.get("description", job_data.get("content",
+            description = job_data.get("description", job_data.get("content", job_data.get("excerpt",
                           job_data.get("MatchedObjectDescriptor", {}).get("UserArea", {})
-                          .get("Details", {}).get("JobSummary", "")))
+                          .get("Details", {}).get("JobSummary", ""))))
             if description:
                 soup = BeautifulSoup(str(description), "html.parser")
                 description = soup.get_text()[:5000]
@@ -552,9 +568,12 @@ class ScraperEngine:
             remote = job_data.get("remote", False)
             if isinstance(remote, str):
                 remote = "remote" in remote.lower()
+            elif not remote and ("remote" in str(location).lower() or "anywhere" in str(location).lower()):
+                remote = True
 
             posted = job_data.get("created_at", job_data.get("updated_at", job_data.get("date",
-                     job_data.get("MatchedObjectDescriptor", {}).get("PublicationStartDate", ""))))
+                     job_data.get("pubDate",
+                     job_data.get("MatchedObjectDescriptor", {}).get("PublicationStartDate", "")))))
 
             return JobEntry(
                 id=f"json_{src.name}_{hash(str(job_data.get('id', str(title)+str(company))))}",
@@ -978,7 +997,220 @@ class ScraperEngine:
         print(f"[SmartRecruiters] {src.name}: {count}/{total} new cyber jobs")
         return count, total
 
+    # ============ BambooHR Scraper ============
+    async def scrape_bamboohr_board(self, src: SourceConfig) -> tuple[int, int]:
+        """Scrape BambooHR job board (free public careers page API).
+        API: GET https://{slug}.bamboohr.com/careers/list
+        """
+        slug = src.url
+        api_url = f"https://{slug}.bamboohr.com/careers/list"
+        print(f"[BambooHR] Fetching {src.name} ({slug})...")
+        content = await self.fetch(api_url)
+        if not content:
+            return 0, 0
+
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            return 0, 0
+
+        postings = data.get("result", [])
+        if not isinstance(postings, list):
+            return 0, 0
+
+        total = len(postings)
+        count = 0
+
+        for posting in postings:
+            if not isinstance(posting, dict):
+                continue
+
+            title = posting.get("title", "").strip()
+            if not is_strictly_cyber_job(title):
+                continue
+
+            loc_data = posting.get("location", {}) or {}
+            city = loc_data.get("city", "") or ""
+            state = loc_data.get("state", "") or ""
+            country = loc_data.get("country", "") or ""
+            location = loc_data.get("label", f"{city}, {state}, {country}".strip(", "))
+
+            emp_type = (posting.get("employmentType", "") or "").lower()
+            if "intern" in emp_type or "intern" in title.lower():
+                job_type = "internship"
+            elif "part" in emp_type:
+                job_type = "part-time"
+            elif "contract" in emp_type:
+                job_type = "contract"
+            else:
+                job_type = "full-time"
+
+            job_url = posting.get("jobUrl", f"https://{slug}.bamboohr.com/careers/view.php?id={posting.get('id', '')}")
+            posted_date = posting.get("datePosted", "")
+
+            job = JobEntry(
+                id=f"bamboohr_{src.name}_{posting.get('id', hash(title + location))}",
+                source=src.name,
+                source_url=f"https://{slug}.bamboohr.com/careers",
+                title=title,
+                company=src.name,
+                location=location or "Remote",
+                remote="remote" in location.lower(),
+                job_type=job_type,
+                domain_tags=[],
+                description="",
+                apply_url=job_url,
+                posted_date=posted_date,
+            )
+            if self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[BambooHR] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
+
+    # ============ Workable Scraper ============
+    async def scrape_workable_board(self, src: SourceConfig) -> tuple[int, int]:
+        """Scrape Workable job board (free public API, no auth needed).
+        API: GET https://apply.workable.com/api/v3/accounts/{slug}/jobs?state=published&limit=50
+        """
+        slug = src.url
+        api_url = f"https://apply.workable.com/api/v3/accounts/{slug}/jobs?state=published&limit=50"
+        print(f"[Workable] Fetching {src.name} ({slug})...")
+        content = await self.fetch(api_url)
+        if not content:
+            return 0, 0
+
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            return 0, 0
+
+        postings = data.get("results", [])
+        if not isinstance(postings, list):
+            return 0, 0
+
+        total = len(postings)
+        count = 0
+
+        for posting in postings:
+            if not isinstance(posting, dict):
+                continue
+
+            title = posting.get("title", "").strip()
+            if not is_strictly_cyber_job(title):
+                continue
+
+            city = posting.get("city", "") or ""
+            country = posting.get("country", "") or ""
+            location = f"{city}, {country}".strip(", ") or "Remote"
+            is_remote = posting.get("telecommuting", False)
+
+            emp_type = (posting.get("employment_type", "") or "").lower()
+            if "intern" in emp_type or "intern" in title.lower():
+                job_type = "internship"
+            elif "part" in emp_type:
+                job_type = "part-time"
+            elif "contract" in emp_type:
+                job_type = "contract"
+            else:
+                job_type = "full-time"
+
+            shortcode = posting.get("shortcode", posting.get("id", ""))
+            apply_url = posting.get("url", f"https://apply.workable.com/{slug}/j/{shortcode}/")
+            published_on = posting.get("published_on", "")
+
+            job = JobEntry(
+                id=f"workable_{src.name}_{posting.get('id', hash(title + location))}",
+                source=src.name,
+                source_url=f"https://apply.workable.com/{slug}/",
+                title=title,
+                company=src.name,
+                location=location,
+                remote=bool(is_remote) or "remote" in location.lower(),
+                job_type=job_type,
+                domain_tags=[],
+                description="",
+                apply_url=apply_url,
+                posted_date=published_on,
+            )
+            if self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[Workable] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
+
+    # ============ Recruitee Scraper ============
+    async def scrape_recruitee_board(self, src: SourceConfig) -> tuple[int, int]:
+        """Scrape Recruitee job board (free public API, no auth needed).
+        API: GET https://{slug}.recruitee.com/api/offers/
+        """
+        slug = src.url
+        api_url = f"https://{slug}.recruitee.com/api/offers/"
+        print(f"[Recruitee] Fetching {src.name} ({slug})...")
+        content = await self.fetch(api_url)
+        if not content:
+            return 0, 0
+
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            return 0, 0
+
+        offers = data.get("offers", [])
+        if not isinstance(offers, list):
+            return 0, 0
+
+        total = len(offers)
+        count = 0
+
+        for offer in offers:
+            if not isinstance(offer, dict):
+                continue
+
+            title = offer.get("title", "").strip()
+            if not is_strictly_cyber_job(title):
+                continue
+
+            city = offer.get("city", "") or ""
+            country = offer.get("country", "") or ""
+            location = f"{city}, {country}".strip(", ") or "Remote"
+            is_remote = offer.get("remote", False)
+
+            kind = (offer.get("kind_of_day", "") or "").lower()
+            if "intern" in kind or "intern" in title.lower():
+                job_type = "internship"
+            elif "part" in kind:
+                job_type = "part-time"
+            elif "contract" in kind or "freelance" in kind:
+                job_type = "contract"
+            else:
+                job_type = "full-time"
+
+            apply_url = offer.get("careers_url", f"https://{slug}.recruitee.com/o/{offer.get('slug', '')}")
+            starts_at = offer.get("starts_at", "") or ""
+
+            job = JobEntry(
+                id=f"recruitee_{src.name}_{offer.get('id', hash(title + location))}",
+                source=src.name,
+                source_url=f"https://{slug}.recruitee.com/",
+                title=title,
+                company=src.name,
+                location=location,
+                remote=bool(is_remote) or "remote" in location.lower(),
+                job_type=job_type,
+                domain_tags=[],
+                description="",
+                apply_url=apply_url,
+                posted_date=starts_at,
+            )
+            if self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[Recruitee] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
+
     # ============ Playwright / Naukri Headless Scraper ============
+
     async def scrape_naukri_playwright(self, src: SourceConfig) -> tuple[int, int]:
         """Use Playwright to scrape Naukri job listings (bypasses reCAPTCHA)."""
         try:
