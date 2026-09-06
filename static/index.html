@@ -35,7 +35,10 @@
     <div class="view-switcher">
       <button id="view-grid-btn" class="view-btn active" onclick="setViewMode('grid')" title="Grid View (G)">▦</button>
       <button id="view-table-btn" class="view-btn" onclick="setViewMode('table')" title="Table View (T)">☷</button>
+      <button id="view-kanban-btn" class="view-btn" onclick="setViewMode('kanban')" title="Kanban Pipeline (K)">📋</button>
     </div>
+    <button class="icon-btn action-pill-btn" onclick="toggleProfileModal()" title="Resume & Skills Keyword Matcher">🎯 Matcher</button>
+    <button class="icon-btn action-pill-btn" onclick="toggleInterviewModal()" title="Cybersecurity Interview Technical Cheat Sheet">💡 Prep</button>
     <button id="theme-toggle" class="icon-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌙</button>
     <button class="icon-btn" onclick="toggleSourcesDrawer()" title="Source Health">📡</button>
     <button class="icon-btn" onclick="toggleShortcutsModal()" title="Keyboard Shortcuts (?)">⌨️</button>
@@ -179,7 +182,8 @@
     <div class="filter-group filter-actions">
       <button class="btn-action btn-primary" onclick="triggerScrape()">⚡ Scrape Now</button>
       <button class="btn-action" onclick="exportCSV()">⬇️ Export CSV</button>
-      <button class="btn-action" onclick="showAppliedJobs()">📋 Applied</button>
+      <button class="btn-action" onclick="copyNotionTable()">📋 Notion Table</button>
+      <button class="btn-action" onclick="showAppliedJobs()">📂 Pipeline</button>
       <button class="btn-action" onclick="clearFilters()">✕ Clear</button>
     </div>
   </div>
@@ -241,6 +245,47 @@
       </thead>
       <tbody id="job-table-body"></tbody>
     </table>
+  </div>
+
+  <!-- Kanban View -->
+  <div id="job-kanban-container" class="job-kanban-container hidden">
+    <div class="kanban-board" id="kanban-board">
+      <div class="kanban-column" data-status="saved">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">📌 Wishlist / Saved</span>
+          <span class="kanban-badge" id="kb-count-saved">0</span>
+        </div>
+        <div class="kanban-col-body" id="kb-col-saved"></div>
+      </div>
+      <div class="kanban-column" data-status="applied">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">📨 Applied</span>
+          <span class="kanban-badge" id="kb-count-applied">0</span>
+        </div>
+        <div class="kanban-col-body" id="kb-col-applied"></div>
+      </div>
+      <div class="kanban-column" data-status="interviewing">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">💬 Interviewing</span>
+          <span class="kanban-badge" id="kb-count-interviewing">0</span>
+        </div>
+        <div class="kanban-col-body" id="kb-col-interviewing"></div>
+      </div>
+      <div class="kanban-column" data-status="offer">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">🎉 Offer</span>
+          <span class="kanban-badge" id="kb-count-offer">0</span>
+        </div>
+        <div class="kanban-col-body" id="kb-col-offer"></div>
+      </div>
+      <div class="kanban-column" data-status="rejected">
+        <div class="kanban-col-header">
+          <span class="kanban-col-title">❌ Rejected</span>
+          <span class="kanban-badge" id="kb-count-rejected">0</span>
+        </div>
+        <div class="kanban-col-body" id="kb-col-rejected"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Bottom Pagination -->
@@ -306,6 +351,84 @@
       <button onclick="closeJobModal()" class="close-btn">✕</button>
     </div>
     <div id="modal-body" class="modal-body"></div>
+  </div>
+</div>
+
+<!-- ===== PITCH & OUTREACH GENERATOR MODAL ===== -->
+<div id="pitch-modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)closePitchModal()">
+  <div class="modal-card modal-wide">
+    <div class="modal-header">
+      <div>
+        <h2 id="pitch-modal-title">⚡ Instant Outreach & Cover Letter</h2>
+        <p id="pitch-modal-sub" class="modal-company">Personalized pitch for your application</p>
+      </div>
+      <button onclick="closePitchModal()" class="close-btn">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="tab-pills" id="pitch-tabs">
+        <button class="pill active" id="ptab-linkedin" onclick="switchPitchTab('linkedin')">💼 LinkedIn Note (≤300 chars)</button>
+        <button class="pill" id="ptab-email" onclick="switchPitchTab('email')">✉️ Cold Email</button>
+        <button class="pill" id="ptab-cover" onclick="switchPitchTab('cover')">📄 Formal Cover Letter</button>
+      </div>
+      <div class="pitch-content-wrapper">
+        <textarea id="pitch-output" class="pitch-textarea" rows="12" readonly></textarea>
+        <div class="pitch-actions">
+          <button class="btn-action btn-primary" onclick="copyPitchText()">📋 Copy to Clipboard</button>
+          <button class="btn-action" id="pitch-recruiter-btn" onclick="openRecruiterSearchFromPitch()">👥 Find Recruiters on LinkedIn</button>
+          <button class="btn-action" id="pitch-gcal-btn" onclick="addFollowUpCalendar()">📅 Follow-Up to G-Calendar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== RESUME & SKILLS MATCHER MODAL ===== -->
+<div id="profile-modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)toggleProfileModal()">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <h2>🎯 Resume & Skills Keyword Matcher</h2>
+        <p class="modal-company">Add your skills to see match scores on every job</p>
+      </div>
+      <button onclick="toggleProfileModal()" class="close-btn">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="helper-text">Enter your technical skills or paste your resume summary (comma-separated or freeform):</p>
+      <textarea id="user-skills-input" class="pitch-textarea" rows="5" placeholder="e.g. Linux, Python, Wireshark, Burp Suite, Nmap, Splunk, OWASP Top 10, TCP/IP, SIEM, SOC, Kali Linux, ISO 27001..."></textarea>
+      
+      <div class="quick-chips-section">
+        <span class="filter-label">Quick Add Cyber Skills:</span>
+        <div class="quick-chips" id="quick-skills-chips"></div>
+      </div>
+      
+      <div class="profile-actions">
+        <button class="btn-action btn-primary" onclick="saveUserSkills()">💾 Save & Calculate Match Scores</button>
+        <button class="btn-action" onclick="resetUserSkills()">🔄 Reset Defaults</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== INTERVIEW PREP CHEAT SHEET MODAL ===== -->
+<div id="interview-modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)toggleInterviewModal()">
+  <div class="modal-card modal-wide modal-tall">
+    <div class="modal-header">
+      <div>
+        <h2>💡 Cybersecurity Technical Interview Cheat Sheet</h2>
+        <p class="modal-company">High-yield technical questions and model answers for freshers & interns</p>
+      </div>
+      <button onclick="toggleInterviewModal()" class="close-btn">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="tab-pills" id="interview-tabs">
+        <button class="pill active" id="itab-soc" onclick="switchInterviewTab('soc')">🛡️ SOC & Blue Team</button>
+        <button class="pill" id="itab-pentest" onclick="switchInterviewTab('pentest')">⚔️ Pen Testing / Red Team</button>
+        <button class="pill" id="itab-cloud" onclick="switchInterviewTab('cloud')">☁️ Cloud Security</button>
+        <button class="pill" id="itab-grc" onclick="switchInterviewTab('grc')">📋 GRC & Compliance</button>
+        <button class="pill" id="itab-network" onclick="switchInterviewTab('network')">🌐 Networking & Linux</button>
+      </div>
+      <div id="interview-content" class="interview-content-area"></div>
+    </div>
   </div>
 </div>
 

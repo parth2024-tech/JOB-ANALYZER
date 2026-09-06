@@ -88,32 +88,44 @@ class TelegramNotifier:
         ids = sorted(j.get("id", "") for j in jobs)
         return hashlib.sha1("|".join(ids).encode()).hexdigest()[:16]
 
+    TIER1_COMPANIES = {
+        "crowdstrike", "palo alto networks", "cloudflare", "fortinet", "zscaler",
+        "sentinelone", "mandiant", "snyk", "wiz", "rapid7", "tenable", "qualys",
+        "huntress", "checkpoint", "sophos", "elastic", "datadog", "okta", "cyberark"
+    }
+
+    def _recruiter_url(self, company: str) -> str:
+        import urllib.parse
+        query = f'{company} ("technical recruiter" OR "cybersecurity recruiter" OR "talent acquisition")'
+        return f"https://www.linkedin.com/search/results/people/?keywords={urllib.parse.quote(query)}"
+
     def format_india_alert(self, jobs: list[dict[str, Any]]) -> str:
-        lines = ["🇮🇳 <b>India Cybersecurity Opportunities</b>", ""]
+        lines = ["🇮🇳 <b>India Cybersecurity Opportunities (Fresher / Intern)</b>", ""]
         for i, job in enumerate(jobs[:8], 1):
             title = job.get("title", "Unknown")
             company = job.get("company", "Unknown")
             location = job.get("location", "India")
             job_type = job.get("job_type", "full-time")
-            seniority = job.get("seniority_level", "mid")
             apply_url = job.get("apply_url", "")
             routes = job.get("application_routes", {})
             direct = routes.get("direct_url", apply_url)
+            recruiter = self._recruiter_url(company)
 
+            is_t1 = any(t in company.lower() for t in self.TIER1_COMPANIES)
+            t1_badge = " ⭐<b>[Tier-1 Cyber]</b>" if is_t1 else ""
             type_emoji = "🎓" if job_type == "internship" else "💼"
-            seniority_badge = {"junior": "🟢", "mid": "🔵", "senior": "🟡", "lead": "🟠", "manager": "🔴"}.get(seniority, "🔵")
 
             lines.append(
-                f"{i}. {type_emoji} {seniority_badge} <b>{title}</b>\n"
+                f"{i}. {type_emoji} <b>{title}</b>{t1_badge}\n"
                 f"   🏢 {company} • 📍 {location}\n"
-                f"   🔗 <a href='{direct}'>Apply Now</a>"
+                f"   🔗 <a href='{direct}'>Apply Now</a> | <a href='{recruiter}'>👥 Find Recruiters</a>"
             )
         if len(jobs) > 8:
             lines.append(f"\n... and {len(jobs) - 8} more India jobs!")
         return "\n".join(lines)
 
     def format_global_intern_alert(self, jobs: list[dict[str, Any]]) -> str:
-        lines = ["🌐 <b>Global Online Cybersecurity Internships</b>", ""]
+        lines = ["🌐 <b>Global Cybersecurity Internships (Remote / Online)</b>", ""]
         for i, job in enumerate(jobs[:8], 1):
             title = job.get("title", "Unknown")
             company = job.get("company", "Unknown")
@@ -121,10 +133,15 @@ class TelegramNotifier:
             apply_url = job.get("apply_url", "")
             routes = job.get("application_routes", {})
             direct = routes.get("direct_url", apply_url)
+            recruiter = self._recruiter_url(company)
+
+            is_t1 = any(t in company.lower() for t in self.TIER1_COMPANIES)
+            t1_badge = " ⭐<b>[Tier-1 Cyber]</b>" if is_t1 else ""
+
             lines.append(
-                f"{i}. 🎓 <b>{title}</b>\n"
-                f"   🌍 {company} • Remote\n"
-                f"   🔗 <a href='{direct}'>Apply Now</a>"
+                f"{i}. 🎓 <b>{title}</b>{t1_badge}\n"
+                f"   🌍 {company} • {location}\n"
+                f"   🔗 <a href='{direct}'>Apply Now</a> | <a href='{recruiter}'>👥 Find Recruiters</a>"
             )
         if len(jobs) > 8:
             lines.append(f"\n... and {len(jobs) - 8} more remote internships!")

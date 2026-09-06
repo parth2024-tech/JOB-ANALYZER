@@ -454,3 +454,263 @@ body {
   .job-table td { border: none; padding: 4px 8px; }
   .job-table td::before { content: attr(data-label); font-weight: 600; font-size: 0.72rem; color: var(--text-muted); display: block; }
 }
+
+/* ===== NEW FEATURES: KANBAN, MATCHER, PITCH, INTERVIEW PREP ===== */
+
+/* Action pill buttons in header */
+.action-pill-btn {
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 20px;
+  background: rgba(0, 255, 157, 0.08);
+  border: 1px solid rgba(0, 255, 157, 0.25);
+  color: var(--accent-green, #00ff9d);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.action-pill-btn:hover {
+  background: rgba(0, 255, 157, 0.18);
+  transform: translateY(-1px);
+}
+
+/* Match Score Badges */
+.badge-match {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.badge-match-high {
+  background: rgba(0, 255, 157, 0.15);
+  color: #00ff9d;
+  border: 1px solid rgba(0, 255, 157, 0.4);
+}
+.badge-match-mid {
+  background: rgba(255, 170, 0, 0.15);
+  color: #ffaa00;
+  border: 1px solid rgba(255, 170, 0, 0.4);
+}
+.badge-match-low {
+  background: rgba(140, 150, 170, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(140, 150, 170, 0.25);
+}
+
+/* Keyword Highlights in Modal */
+.matched-tags-section {
+  margin: 14px 0;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+.tag-pill-match {
+  background: rgba(0, 255, 157, 0.15);
+  color: #00ff9d;
+  border: 1px solid rgba(0, 255, 157, 0.4);
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin: 2px;
+  display: inline-block;
+}
+.tag-pill-missing {
+  background: rgba(255, 77, 77, 0.12);
+  color: #ff6b6b;
+  border: 1px solid rgba(255, 77, 77, 0.3);
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  margin: 2px;
+  display: inline-block;
+}
+
+/* Quick Skills Chips */
+.quick-chips-section {
+  margin: 12px 0;
+}
+.quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.quick-chip {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.quick-chip:hover, .quick-chip.selected {
+  background: rgba(0, 255, 157, 0.15);
+  color: #00ff9d;
+  border-color: rgba(0, 255, 157, 0.4);
+}
+
+/* Pitch & Profile Textarea */
+.pitch-textarea {
+  width: 100%;
+  background: rgba(10, 15, 25, 0.8);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  padding: 12px;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+.pitch-textarea:focus {
+  border-color: var(--accent-green, #00ff9d);
+}
+.pitch-actions, .profile-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+/* Kanban Board Layout */
+.job-kanban-container {
+  width: 100%;
+  overflow-x: auto;
+  padding-bottom: 20px;
+}
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(280px, 1fr));
+  gap: 14px;
+  min-width: 1400px;
+}
+.kanban-column {
+  background: var(--bg-card, #111827);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+}
+.kanban-col-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.kanban-badge {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+.kanban-col-body {
+  padding: 10px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kanban-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-radius: 10px;
+  padding: 12px;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.kanban-card:hover {
+  border-color: rgba(0, 255, 157, 0.3);
+  transform: translateY(-2px);
+}
+.kanban-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.kanban-card-company {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.kanban-card-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+.kanban-stage-select {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+
+/* Interview Prep Cheat Sheet */
+.modal-tall {
+  max-height: 85vh;
+}
+.interview-content-area {
+  margin-top: 16px;
+  overflow-y: auto;
+  max-height: 55vh;
+  padding-right: 8px;
+}
+.cheat-item {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  padding: 14px;
+}
+.cheat-q {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--accent-green, #00ff9d);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cheat-a {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+.cheat-a code {
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  color: #38bdf8;
+}
+.cheat-tip {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: rgba(255, 170, 0, 0.08);
+  border-left: 3px solid #ffaa00;
+  border-radius: 4px;
+  font-size: 0.78rem;
+  color: #ffaa00;
+}
+
