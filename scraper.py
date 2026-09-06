@@ -281,7 +281,7 @@ class ScraperEngine:
                         elif field == "Apply":
                             m = re.search(r"\((https?://[^)]+)\)", value)
                             apply_url = m.group(1) if m else value
-                        elif "date" in field.lower():
+                        elif "date" in field.lower() or "posted" in field.lower():
                             posted_date = value
                 elif line.startswith("# "):
                     title = line[2:].strip()

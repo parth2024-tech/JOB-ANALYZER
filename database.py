@@ -1180,9 +1180,25 @@ class JobDatabase:
                     status = resp.status
                     if status >= 400:
                         return jid, False, f"HTTP {status}"
-                    text = (await resp.text(errors="ignore")).lower()
+                    text = await resp.text(errors="ignore")
+                    final_url = str(resp.url)
+                    
+                    # Workday SPA specific check: if og:title is empty, job has expired/been taken down
+                    if "myworkdayjobs.com" in url:
+                        m = re.search(r"<meta\s+name=[\"\x27]title[\"\x27]\s+property=[\"\x27]og:title[\"\x27]\s+content=[\"\x27]([^\"]*)[\"\x27]", text)
+                        if not m or not m.group(1).strip():
+                            return jid, False, "Workday expired (empty og:title)"
+                    
+                    # Greenhouse specific check: if redirected with error=true or general board without job
+                    if "greenhouse.io" in url:
+                        if "error=true" in final_url or "error=true" in text or "Page Not Found" in text:
+                            m = re.search(r"<meta\s+property=[\"\x27]og:title[\"\x27]\s+content=[\"\x27]([^\"]*)[\"\x27]", text)
+                            if not m or ("Job" not in m.group(1) and "Careers" in m.group(1)):
+                                return jid, False, "Greenhouse expired (redirected to board)"
+
+                    text_l = text.lower()
                     for cp in closed_phrases:
-                        if cp in text:
+                        if cp in text_l:
                             return jid, False, f"Closed text: {cp}"
                     return jid, True, "OK"
             except Exception as e:
