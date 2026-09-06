@@ -359,11 +359,28 @@ EXCLUDE_EXPERIENCED_PATTERNS = [
 
 
 def is_within_max_age(posted_date: str | None, discovered_at: str | None, max_days: int = 14) -> bool:
-    """Check if a job was posted or discovered within max_days (default 14 days / 2 weeks)."""
+    """Check if a job was posted or discovered within max_days (default 14 days / 2 weeks).
+
+    Priority: discovered_at is checked FIRST. If we scraped this job recently from an
+    actively-maintained source (e.g. NotifyYouInc GitHub repo), trust our discovery date —
+    the employer's original posted_date may be 60+ days old even though the listing is current.
+    """
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=max_days)
 
-    # Check posted_date first
+    # PRIORITY 1: If we discovered the job recently, trust our scrape date.
+    # This is crucial for GitHub-curated lists where posted_date = employer's original date.
+    if discovered_at:
+        try:
+            dt = dateutil.parser.parse(str(discovered_at).strip())
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            if dt >= cutoff:
+                return True  # Discovered recently → always keep
+        except Exception:
+            pass
+
+    # PRIORITY 2: Fall back to posted_date only if discovered_at is old or missing
     if posted_date:
         val_str = str(posted_date).strip()
         if val_str:
@@ -374,22 +391,11 @@ def is_within_max_age(posted_date: str | None, discovered_at: str | None, max_da
                     dt = dateutil.parser.parse(val_str)
                     if dt.tzinfo is None:
                         dt = dt.replace(tzinfo=timezone.utc)
-                if dt < cutoff:
-                    return False
-                return True
+                return dt >= cutoff
             except Exception:
                 pass
 
-    # Check discovered_at
-    if discovered_at:
-        try:
-            dt = dateutil.parser.parse(str(discovered_at).strip())
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt >= cutoff
-        except Exception:
-            pass
-
+    # Unknown age → don't purge (benefit of the doubt)
     return True
 
 
@@ -1150,11 +1156,16 @@ class JobDatabase:
                     updated += 1
         return {"updated": updated, "total": len(rows)}
 
-
-
     async def verify_and_purge_broken_links(self) -> dict[str, Any]:
-        """Asynchronously test all job links and purge broken/closed ones."""
+        """Asynchronously test all job links and purge broken/closed ones.
+
+        Uses ATS-specific checks:
+        - Workday: CXS Search API (og:title is always empty in raw HTML — JS SPA)
+        - Greenhouse: redirect error=true detection
+        - Generic: HTTP status + closed phrases
+        """
         import aiohttp
+        MAX_VERIFY = 150  # Cap per cycle to avoid slow cold-starts on Render free tier
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
         }
@@ -1166,35 +1177,77 @@ class JobDatabase:
         ]
 
         with self._conn() as conn:
-            rows = conn.execute("SELECT id, title, company, apply_url FROM jobs").fetchall()
+            rows = conn.execute("SELECT id, title, company, apply_url FROM jobs LIMIT ?", (MAX_VERIFY,)).fetchall()
 
         if not rows:
             return {"total": 0, "verified": 0, "purged": 0}
+
+        async def check_workday(session, jid: str, url: str) -> tuple[str, bool, str]:
+            """Check Workday job via CXS Search API (not HTML — always empty in raw HTML)."""
+            try:
+                # Parse: https://{tenant}.wd3.myworkdayjobs.com/{site}/job/{loc}/{title}_{jobId}
+                # We need tenant and site to build the CXS endpoint
+                m_tenant = re.match(r"https://([^.]+)\.wd\d+\.myworkdayjobs\.com/([^/]+)", url)
+                if not m_tenant:
+                    return jid, True, "Workday URL format unknown — skip"
+                tenant = m_tenant.group(1)
+                site = m_tenant.group(2)
+
+                # Extract job ID from URL (usually last segment after _)
+                m_jobid = re.search(r"_([A-Z0-9]+)(?:\?|$)", url)
+                if not m_jobid:
+                    return jid, True, "Workday job ID not found — skip"
+                job_id = m_jobid.group(1)
+
+                cxs_url = f"https://{tenant}.wd3.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs"
+                payload = {
+                    "searchText": job_id,
+                    "limit": 1,
+                    "offset": 0,
+                    "appliedFacets": {},
+                    "returnFacets": []
+                }
+                async with session.post(
+                    cxs_url,
+                    json=payload,
+                    headers={**headers, "Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=12)
+                ) as resp:
+                    if resp.status != 200:
+                        return jid, True, f"CXS HTTP {resp.status} — skip"
+                    data = await resp.json(content_type=None)
+                    total = data.get("total", 1)
+                    if total == 0:
+                        return jid, False, "Workday CXS: job not found (total=0)"
+                    return jid, True, f"Workday CXS: {total} result(s)"
+            except Exception as e:
+                # On CXS error, keep the job (don't false-positive purge)
+                return jid, True, f"Workday CXS error (keep): {str(e)[:40]}"
 
         async def check(session, r):
             jid, title, comp, url = r["id"], r["title"], r["company"], r["apply_url"]
             if not url or not url.startswith("http"):
                 return jid, False, "No URL"
             try:
-                async with session.get(url, timeout=aiohttp.ClientTimeout(total=8), allow_redirects=True) as resp:
+                # Workday SPA: use CXS API, NOT og:title (always empty in raw HTML)
+                if "myworkdayjobs.com" in url:
+                    return await check_workday(session, jid, url)
+
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=12), allow_redirects=True) as resp:
                     status = resp.status
                     if status >= 400:
                         return jid, False, f"HTTP {status}"
                     text = await resp.text(errors="ignore")
                     final_url = str(resp.url)
-                    
-                    # Workday SPA specific check: if og:title is empty, job has expired/been taken down
-                    if "myworkdayjobs.com" in url:
-                        m = re.search(r"<meta\s+name=[\"\x27]title[\"\x27]\s+property=[\"\x27]og:title[\"\x27]\s+content=[\"\x27]([^\"]*)[\"\x27]", text)
-                        if not m or not m.group(1).strip():
-                            return jid, False, "Workday expired (empty og:title)"
-                    
-                    # Greenhouse specific check: if redirected with error=true or general board without job
+
+                    # Greenhouse specific check: if redirected with error=true
                     if "greenhouse.io" in url:
-                        if "error=true" in final_url or "error=true" in text or "Page Not Found" in text:
-                            m = re.search(r"<meta\s+property=[\"\x27]og:title[\"\x27]\s+content=[\"\x27]([^\"]*)[\"\x27]", text)
+                        if "error=true" in final_url or "error=true" in text:
+                            return jid, False, "Greenhouse expired (error=true)"
+                        if "Page Not Found" in text:
+                            m = re.search(r"<meta\s+property=[\"']og:title[\"']\s+content=[\"']([^\"']*)[\"']", text)
                             if not m or ("Job" not in m.group(1) and "Careers" in m.group(1)):
-                                return jid, False, "Greenhouse expired (redirected to board)"
+                                return jid, False, "Greenhouse expired (Page Not Found)"
 
                     text_l = text.lower()
                     for cp in closed_phrases:
