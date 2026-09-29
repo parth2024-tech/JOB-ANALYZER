@@ -64,5 +64,21 @@ async def test_subscriptions_and_trends_endpoints(temp_db):
         deleted = await resp.json()
         assert deleted["status"] == "deleted"
 
+        # 8. GET /api/jobs with freshness and max_exp
+        resp = await client.get("/api/jobs?freshness=24h&max_exp=1")
+        assert resp.status == 200
+        jobs_res = await resp.json()
+        assert "items" in jobs_res
+        assert "total" in jobs_res
+
+        # 9. GET /api/export/csv
+        resp = await client.get("/api/export/csv?freshness=24h")
+        assert resp.status == 200
+        assert resp.headers["Content-Type"] == "text/csv"
+        csv_text = await resp.text()
+        assert "Freshness Bucket" in csv_text
+        assert "Min Exp Years" in csv_text
+        assert "Company Logo" in csv_text
+
     finally:
         await client.close()

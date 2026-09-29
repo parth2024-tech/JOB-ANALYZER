@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import re
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -135,6 +136,15 @@ class ScraperEngine:
         for src in sources_cfg.get("recruitee_boards", []):
             rt_src = SourceConfig(name=src["name"], url=src["slug"], type="recruitee")
             tasks.append(self._run_source(self.scrape_recruitee_board, rt_src))
+
+        for src in sources_cfg.get("linkedin_guest", []):
+            tasks.append(self._run_source(self.scrape_linkedin_guest, SourceConfig(**src)))
+
+        for src in sources_cfg.get("remotive_sources", []):
+            tasks.append(self._run_source(self.scrape_remotive, SourceConfig(**src)))
+
+        for src in sources_cfg.get("remoteok_sources", []):
+            tasks.append(self._run_source(self.scrape_remoteok, SourceConfig(**src)))
 
         results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1330,6 +1340,240 @@ class ScraperEngine:
                 count += 1
 
         print(f"[Playwright] {src.name}: {count}/{total} new India cyber jobs")
+        return count, total
+
+    # ============ LinkedIn Guest Scraper ============
+    async def scrape_linkedin_guest(self, src: SourceConfig) -> tuple[int, int]:
+        """
+        Scrape LinkedIn Guest API (no login or key required).
+        Uses public job search endpoint: /jobs-guest/jobs/api/seeMoreJobPostings/search
+        """
+        print(f"[LinkedIn Guest] Fetching {src.name}...")
+        base_url = "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search"
+        parsed = urllib.parse.urlparse(src.url)
+        qparams = urllib.parse.parse_qs(parsed.query)
+        keywords = qparams.get("keywords", ["cybersecurity intern"])[0]
+        geo_id = qparams.get("geoId", ["102713980"])[0]
+        is_remote = "f_WT" in qparams or "remote" in src.url.lower()
+
+        total = 0
+        count = 0
+
+        for start_idx in (0, 25):
+            params = {
+                "keywords": keywords,
+                "geoId": geo_id,
+                "f_TPR": "r604800",
+                "start": str(start_idx)
+            }
+            if is_remote:
+                params["f_WT"] = "2"
+
+            query_str = urllib.parse.urlencode(params)
+            url = f"{base_url}?{query_str}"
+            html = await self.fetch(url)
+            if not html:
+                continue
+
+            soup = BeautifulSoup(html, "html.parser")
+            cards = soup.find_all("li")
+            if not cards:
+                cards = soup.find_all("div", class_="base-card")
+
+            total += len(cards)
+            for card in cards:
+                try:
+                    title_elem = card.find("h3", class_="base-search-card__title")
+                    title = title_elem.get_text(strip=True) if title_elem else ""
+                    if not title:
+                        continue
+
+                    comp_elem = card.find("h4", class_="base-search-card__subtitle")
+                    company = comp_elem.get_text(strip=True) if comp_elem else "Unknown"
+
+                    loc_elem = card.find("span", class_="job-search-card__location")
+                    location = loc_elem.get_text(strip=True) if loc_elem else "India"
+
+                    link_elem = card.find("a", class_="base-card__full-link")
+                    apply_url = str(link_elem["href"]) if link_elem and link_elem.has_attr("href") else ""
+                    if not apply_url:
+                        any_a = card.find("a", href=re.compile(r"/jobs/view/"))
+                        apply_url = str(any_a["href"]) if any_a else ""
+
+                    if not apply_url:
+                        continue
+                    apply_url = apply_url.split("?")[0]
+
+                    time_elem = card.find("time")
+                    posted_date = str(time_elem["datetime"]) if time_elem and time_elem.has_attr("datetime") else ""
+
+                    img_elem = card.find("img")
+                    logo_url = ""
+                    if img_elem:
+                        raw_logo = img_elem.get("data-delayed-url") or img_elem.get("src") or ""
+                        logo_url = str(raw_logo).replace("&amp;", "&")
+
+                    remote = is_remote or "remote" in location.lower()
+                    job_type = "internship" if ("intern" in title.lower() or "internship" in title.lower()) else "full-time"
+
+                    job = JobEntry(
+                        id=f"linkedin_guest_{abs(hash(apply_url))}",
+                        source=src.name,
+                        source_url=src.url,
+                        title=title,
+                        company=company,
+                        location=location,
+                        remote=remote,
+                        job_type=job_type,
+                        domain_tags=[],
+                        description=f"{title} at {company} - {location}",
+                        apply_url=apply_url,
+                        posted_date=posted_date,
+                        logo_url=logo_url,
+                        min_exp_years=0.0 if "intern" in title.lower() else None
+                    )
+                    if self.db.insert_job(job, self.keywords):
+                        count += 1
+                except Exception as e:
+                    print(f"[LinkedIn Guest] Parse error: {e}")
+                    continue
+
+        print(f"[LinkedIn Guest] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
+
+    # ============ Remotive Scraper ============
+    async def scrape_remotive(self, src: SourceConfig) -> tuple[int, int]:
+        """
+        Scrape Remotive free public API (remote jobs).
+        Endpoint: https://remotive.com/api/remote-jobs
+        """
+        print(f"[Remotive] Fetching {src.name}...")
+        content = await self.fetch(src.url)
+        if not content:
+            return 0, 0
+
+        try:
+            data = json.loads(content)
+            jobs_list = data.get("jobs", [])
+        except Exception as e:
+            print(f"[Remotive] JSON parse error: {e}")
+            return 0, 0
+
+        total = 0
+        count = 0
+
+        for j in jobs_list:
+            title = j.get("title", "")
+            tags = " ".join(j.get("tags", []))
+            desc = j.get("description", "")
+            company = j.get("company_name", "Unknown")
+            full_text = f"{title} {tags} {desc}"
+
+            if not is_strictly_cyber_job(title, full_text):
+                continue
+
+            total += 1
+            apply_url = j.get("url", "")
+            if not apply_url:
+                continue
+
+            location = j.get("candidate_required_location") or "Remote"
+            logo_url = j.get("company_logo", "") or ""
+            posted_date = j.get("publication_date", "")
+
+            soup = BeautifulSoup(desc[:5000], "html.parser")
+            clean_desc = soup.get_text()
+
+            job = JobEntry(
+                id=f"remotive_{j.get('id', abs(hash(apply_url)))}",
+                source=src.name,
+                source_url=src.url,
+                title=title,
+                company=company,
+                location=location,
+                remote=True,
+                job_type="internship" if "intern" in title.lower() else "full-time",
+                domain_tags=[],
+                description=clean_desc,
+                apply_url=apply_url,
+                posted_date=posted_date,
+                logo_url=logo_url,
+                min_exp_years=0.0 if "intern" in title.lower() else None
+            )
+            if self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[Remotive] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
+
+    # ============ RemoteOK Scraper ============
+    async def scrape_remoteok(self, src: SourceConfig) -> tuple[int, int]:
+        """
+        Scrape RemoteOK free public API (remote jobs).
+        Endpoint: https://remoteok.com/api
+        """
+        print(f"[RemoteOK] Fetching {src.name}...")
+        content = await self.fetch(src.url)
+        if not content:
+            return 0, 0
+
+        try:
+            jobs_list = json.loads(content)
+            if not isinstance(jobs_list, list):
+                return 0, 0
+        except Exception as e:
+            print(f"[RemoteOK] JSON parse error: {e}")
+            return 0, 0
+
+        total = 0
+        count = 0
+
+        for j in jobs_list:
+            if not isinstance(j, dict):
+                continue
+            title = j.get("position", "")
+            if not title:
+                continue
+            tags = " ".join(j.get("tags", []))
+            desc = j.get("description", "")
+            company = j.get("company", "Unknown")
+            full_text = f"{title} {tags} {desc}"
+
+            if not is_strictly_cyber_job(title, full_text):
+                continue
+
+            total += 1
+            apply_url = j.get("url") or j.get("apply_url", "")
+            if not apply_url:
+                continue
+
+            location = j.get("location") or "Remote"
+            logo_url = j.get("company_logo", "") or ""
+            posted_date = j.get("date", "")
+
+            soup = BeautifulSoup(desc[:5000], "html.parser")
+            clean_desc = soup.get_text()
+
+            job = JobEntry(
+                id=f"remoteok_{j.get('id', abs(hash(apply_url)))}",
+                source=src.name,
+                source_url=src.url,
+                title=title,
+                company=company,
+                location=location,
+                remote=True,
+                job_type="internship" if "intern" in title.lower() else "full-time",
+                domain_tags=[],
+                description=clean_desc,
+                apply_url=apply_url,
+                posted_date=posted_date,
+                logo_url=logo_url,
+                min_exp_years=0.0 if "intern" in title.lower() else None
+            )
+            if self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[RemoteOK] {src.name}: {count}/{total} new cyber jobs")
         return count, total
 
 

@@ -735,6 +735,30 @@ sources:
     - name: "Eye Security"
       slug: "eye-security"
 
+  linkedin_guest:
+    - name: "LinkedIn India Cyber Interns"
+      url: "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=cybersecurity+intern&geoId=102713980"
+      type: "linkedin_guest"
+    - name: "LinkedIn India Cyber Freshers"
+      url: "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=cyber+security+fresher&geoId=102713980"
+      type: "linkedin_guest"
+    - name: "LinkedIn India SOC Analyst Interns"
+      url: "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=soc+analyst+intern&geoId=102713980"
+      type: "linkedin_guest"
+    - name: "LinkedIn Global Remote Cyber Interns"
+      url: "https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=cybersecurity+intern&geoId=92000000&f_WT=2"
+      type: "linkedin_guest"
+
+  remotive_sources:
+    - name: "Remotive Remote Security"
+      url: "https://remotive.com/api/remote-jobs?category=software-dev&search=security"
+      type: "remotive"
+
+  remoteok_sources:
+    - name: "RemoteOK Security Feed"
+      url: "https://remoteok.com/api"
+      type: "remoteok"
+
 keywords:
   domains:
     - "offensive"

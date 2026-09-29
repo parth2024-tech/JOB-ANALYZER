@@ -213,6 +213,15 @@ class CyberSecWebServer:
         elif remote_val in ("0", "false", "no"):
             remote = False
 
+        freshness = params.get("freshness", "").strip()
+        max_exp: float | None = None
+        try:
+            exp_val = params.get("max_exp", "").strip()
+            if exp_val:
+                max_exp = float(exp_val)
+        except ValueError:
+            max_exp = None
+
         try:
             page = max(1, int(params.get("page", 1)))
         except ValueError:
@@ -227,7 +236,8 @@ class CyberSecWebServer:
             source=source, seniority=seniority, company_category=company_category,
             min_salary_lpa=min_salary_lpa, sort_by=sort_by,
             location_scope=location_scope, target_only=target_only,
-            page=page, page_size=page_size
+            page=page, page_size=page_size,
+            freshness=freshness, max_exp=max_exp
         )
         return web.json_response(result)
 
@@ -438,12 +448,23 @@ class CyberSecWebServer:
     # ========== CSV Export ==========
     async def handle_api_export_csv(self, request: web.Request) -> web.Response:
         params = request.query
+        freshness = params.get("freshness", "").strip()
+        max_exp: float | None = None
+        try:
+            exp_val = params.get("max_exp", "").strip()
+            if exp_val:
+                max_exp = float(exp_val)
+        except ValueError:
+            max_exp = None
+
         result = self.db.get_jobs_filtered(
             search=params.get("search", ""),
             job_type=params.get("type", ""),
             domain=params.get("domain", ""),
             seniority=params.get("seniority", ""),
             location_scope=params.get("location_scope", "all"),
+            freshness=freshness,
+            max_exp=max_exp,
             page=1, page_size=5000
         )
         items = result.get("items", [])
@@ -452,9 +473,9 @@ class CyberSecWebServer:
         writer = csv.writer(output)
         writer.writerow([
             "Title", "Company", "Company Category", "Location", "Job Type", "Seniority",
-            "Salary", "Salary Min LPA", "Salary Max LPA", "Remote",
+            "Min Exp Years", "Freshness Bucket", "Salary", "Salary Min LPA", "Salary Max LPA", "Remote",
             "Domain Tags", "Skills", "Direct Apply URL", "Google Jobs URL",
-            "LinkedIn URL", "Is India", "Is Target Match", "Source", "Discovered At"
+            "LinkedIn URL", "Company Logo", "Is India", "Is Target Match", "Source", "Discovered At"
         ])
         for job in items:
             routes = job.get("application_routes", {})
@@ -465,6 +486,8 @@ class CyberSecWebServer:
                 job.get("location", ""),
                 job.get("job_type", ""),
                 job.get("seniority_level", ""),
+                job.get("min_exp_years") if job.get("min_exp_years") is not None else "",
+                job.get("freshness_bucket", ""),
                 job.get("salary_display", ""),
                 job.get("salary_inr_lpa_min") or "",
                 job.get("salary_inr_lpa_max") or "",
@@ -474,6 +497,7 @@ class CyberSecWebServer:
                 routes.get("direct_url", ""),
                 routes.get("google_jobs_url", ""),
                 routes.get("linkedin_jobs_url", ""),
+                job.get("logo_url", ""),
                 "Yes" if job.get("is_india") else "No",
                 "Yes" if job.get("is_target_match") else "No",
                 job.get("source", ""),

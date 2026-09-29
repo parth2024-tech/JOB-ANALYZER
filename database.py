@@ -271,6 +271,8 @@ class JobEntry:
     hash: str = ""
     seniority_level: str = ""   # junior / mid / senior / lead / manager
     skills_required: str = "[]" # JSON list of extracted skills
+    logo_url: str = ""
+    min_exp_years: float | None = None
 
 
 INDIA_LOCATIONS = [
@@ -421,6 +423,76 @@ def is_within_max_age(posted_date: str | None, discovered_at: str | None, max_da
     return True
 
 
+YEARS_RANGE_RE = re.compile(
+    r"(\d{1,2})\s*(?:\+|\-|\u2013|to|\u2014)?\s*(\d{1,2})?\s*\+?\s*(?:years?|yrs?|yr|yoe)\b",
+    re.IGNORECASE
+)
+
+
+def parse_year_ranges(text: str) -> list[tuple[int, int]]:
+    """Extract all (min_yrs, max_yrs) experience tuples from text."""
+    if not text:
+        return []
+    ranges = []
+    for m in YEARS_RANGE_RE.finditer(str(text)):
+        lo = int(m.group(1))
+        hi = int(m.group(2)) if m.group(2) else lo
+        ranges.append((lo, hi))
+    return ranges
+
+
+def extract_min_exp_years(title: str, description: str = "", job_type: str = "") -> float | None:
+    """Extract minimum experience years requirement (e.g. 0.0 for interns/entry, 1.0 for 1 yr)."""
+    t = (title or "").lower()
+    d = (description or "").lower()
+    full_text = f"{t} {d}"
+
+    # Internships and apprenticeships are explicitly 0 years experience
+    if (job_type or "").lower() == "internship" or "intern" in t or "apprentice" in t or "trainee" in t:
+        return 0.0
+
+    if any(k in full_text for k in ["no experience", "0 years", "0 yrs", "0 yoe", "0-0 years", "fresher", "freshers", "recent graduate", "new grad"]):
+        return 0.0
+
+    ranges = parse_year_ranges(full_text)
+    if ranges:
+        lo = min(r[0] for r in ranges)
+        return float(lo)
+
+    if any(k in t for k in ["graduate", "junior", "associate", "entry level", "entry-level"]):
+        return 0.0
+
+    return None
+
+
+def compute_freshness_bucket(posted_date: str | None, discovered_at: str | None) -> str:
+    """Determine freshness bucket: '1h', '24h', 'week', or 'older'."""
+    now = datetime.now(timezone.utc)
+    target_dt: datetime | None = None
+    for val in (posted_date, discovered_at):
+        if val:
+            try:
+                dt = dateutil.parser.parse(str(val).strip())
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                target_dt = dt
+                break
+            except Exception:
+                continue
+
+    if not target_dt:
+        return "24h"
+
+    age = now - target_dt
+    if age <= timedelta(hours=1):
+        return "1h"
+    if age <= timedelta(hours=24):
+        return "24h"
+    if age <= timedelta(days=7):
+        return "week"
+    return "older"
+
+
 def is_fresher_or_intern(title: str, description: str = "", job_type: str = "") -> bool:
     """Strictly verify that job is for freshers or internships only."""
     if not title:
@@ -431,6 +503,13 @@ def is_fresher_or_intern(title: str, description: str = "", job_type: str = "") 
     # Reject experienced roles immediately
     for exc in EXCLUDE_EXPERIENCED_PATTERNS:
         if re.search(exc, t):
+            return False
+
+    # Reject if text requires > 2 years experience (e.g. 3-5 years)
+    ranges = parse_year_ranges(f"{t} {d}")
+    if ranges:
+        min_required = min(r[0] for r in ranges)
+        if min_required > 2:
             return False
 
     # Positive match in job_type
@@ -658,7 +737,9 @@ class JobDatabase:
                     discovered_at TEXT NOT NULL,
                     hash TEXT NOT NULL UNIQUE,
                     seniority_level TEXT DEFAULT 'mid',
-                    skills_required TEXT DEFAULT '[]'
+                    skills_required TEXT DEFAULT '[]',
+                    logo_url TEXT DEFAULT '',
+                    min_exp_years REAL DEFAULT NULL
                 )
             """)
 
@@ -669,7 +750,9 @@ class JobDatabase:
                 ("salary_display", "TEXT DEFAULT ''"),
                 ("salary_inr_lpa_min", "REAL DEFAULT NULL"),
                 ("salary_inr_lpa_max", "REAL DEFAULT NULL"),
-                ("company_category", "TEXT DEFAULT 'other'")
+                ("company_category", "TEXT DEFAULT 'other'"),
+                ("logo_url", "TEXT DEFAULT ''"),
+                ("min_exp_years", "REAL DEFAULT NULL"),
             ]:
                 try:
                     conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} {coldef}")
@@ -823,6 +906,11 @@ class JobDatabase:
         salary_inr_lpa_max = salary_info.get("salary_inr_lpa_max")
         company_category = classify_company(job.company)
 
+        # Experience & Logo extraction
+        if job.min_exp_years is None:
+            job.min_exp_years = extract_min_exp_years(job.title, job.description, job.job_type)
+        logo_url = getattr(job, "logo_url", "") or ""
+
         with self._conn() as conn:
             try:
                 conn.execute("""
@@ -831,8 +919,9 @@ class JobDatabase:
                         job_type, domain_tags, salary_min, salary_max, salary_currency,
                         description, apply_url, posted_date, discovered_at, hash,
                         seniority_level, skills_required, salary_display,
-                        salary_inr_lpa_min, salary_inr_lpa_max, company_category
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        salary_inr_lpa_min, salary_inr_lpa_max, company_category,
+                        logo_url, min_exp_years
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     job.id, job.source, job.source_url, job.title, job.company,
                     job.location, int(job.remote), job.job_type,
@@ -840,7 +929,8 @@ class JobDatabase:
                     job.salary_currency, job.description, job.apply_url,
                     job.posted_date, job.discovered_at, job.hash,
                     job.seniority_level, job.skills_required, salary_display,
-                    salary_inr_lpa_min, salary_inr_lpa_max, company_category
+                    salary_inr_lpa_min, salary_inr_lpa_max, company_category,
+                    logo_url, job.min_exp_years
                 ))
                 return True
             except sqlite3.IntegrityError:
@@ -907,6 +997,9 @@ class JobDatabase:
             data["target_badge"] = "🇮🇳 India • Fresher / Intern" if is_ind else "🌐 Global • Fresher / Intern"
             data["application_routes"] = generate_application_routes(tit, comp, data.get("apply_url"))
             data["apply_url"] = data["application_routes"]["direct_url"]
+            data["freshness_bucket"] = compute_freshness_bucket(data.get("posted_date"), data.get("discovered_at"))
+            data["logo_url"] = data.get("logo_url") or ""
+            data["min_exp_years"] = data.get("min_exp_years")
 
             # Check if applied
             applied_row = conn.execute("SELECT * FROM applications WHERE job_id = ?", (job_id,)).fetchone()
@@ -1168,7 +1261,9 @@ class JobDatabase:
         location_scope: str = "all",
         target_only: bool = False,
         page: int = 1,
-        page_size: int = 24
+        page_size: int = 24,
+        freshness: str = "",
+        max_exp: float | None = None,
     ) -> dict[str, Any]:
         conditions: list[str] = []
         params: list[Any] = []
@@ -1194,6 +1289,25 @@ class JobDatabase:
         if min_salary_lpa is not None and min_salary_lpa > 0:
             conditions.append("salary_inr_lpa_max >= ?")
             params.append(min_salary_lpa)
+
+        if max_exp is not None:
+            conditions.append("(min_exp_years IS NULL OR min_exp_years <= ?)")
+            params.append(max_exp)
+
+        if freshness:
+            now_dt = datetime.now(timezone.utc)
+            if freshness == "1h":
+                cutoff = (now_dt - timedelta(hours=1)).isoformat()
+                conditions.append("(discovered_at >= ? OR posted_date >= ?)")
+                params.extend([cutoff, cutoff])
+            elif freshness == "24h":
+                cutoff = (now_dt - timedelta(hours=24)).isoformat()
+                conditions.append("(discovered_at >= ? OR posted_date >= ?)")
+                params.extend([cutoff, cutoff])
+            elif freshness == "week":
+                cutoff = (now_dt - timedelta(days=7)).isoformat()
+                conditions.append("(discovered_at >= ? OR posted_date >= ?)")
+                params.extend([cutoff, cutoff])
 
         if domain and domain != "all":
             conditions.append("domain_tags LIKE ?")
@@ -1293,6 +1407,9 @@ class JobDatabase:
                 item["application_routes"] = generate_application_routes(tit, comp, item.get("apply_url"))
                 item["apply_url"] = item["application_routes"]["direct_url"]
                 item["applied"] = item["id"] in applied_ids
+                item["freshness_bucket"] = compute_freshness_bucket(item.get("posted_date"), item.get("discovered_at"))
+                item["logo_url"] = item.get("logo_url") or ""
+                item["min_exp_years"] = item.get("min_exp_years")
                 items.append(item)
 
             total_pages = (total + page_size - 1) // page_size if total > 0 else 1

@@ -5,7 +5,7 @@
 const state = {
   page: 1, pageSize: 24, totalPages: 1, totalJobs: 0,
   search: "", type: "", domain: "", source: "", seniority: "",
-  company_category: "", min_salary_lpa: "",
+  company_category: "", min_salary_lpa: "", freshness: "", max_exp: "",
   sort: "newest", location_scope: "all", remote: null,
   viewMode: localStorage.getItem("viewMode") || "grid",
   lastTimestamp: new Date().toISOString(),
@@ -116,6 +116,8 @@ function syncUrlParams() {
   if (state.domain) params.set("domain", state.domain);
   if (state.source) params.set("source", state.source);
   if (state.seniority) params.set("seniority", state.seniority);
+  if (state.freshness) params.set("freshness", state.freshness);
+  if (state.max_exp !== undefined && state.max_exp !== "") params.set("max_exp", state.max_exp);
   if (state.sort !== "newest") params.set("sort", state.sort);
   if (state.location_scope !== "all") params.set("scope", state.location_scope);
   if (state.remote !== null) params.set("remote", state.remote ? "1" : "0");
@@ -129,6 +131,8 @@ function readUrlParams() {
   if (p.get("domain")) state.domain = p.get("domain");
   if (p.get("source")) state.source = p.get("source");
   if (p.get("seniority")) state.seniority = p.get("seniority");
+  if (p.get("freshness")) state.freshness = p.get("freshness");
+  if (p.get("max_exp") !== null) state.max_exp = p.get("max_exp");
   if (p.get("sort")) state.sort = p.get("sort");
   if (p.get("scope")) state.location_scope = p.get("scope");
   if (p.get("remote")) state.remote = p.get("remote") === "1";
@@ -136,6 +140,12 @@ function readUrlParams() {
   // Reflect in UI
   if (state.search) document.getElementById("search-input").value = state.search;
   if (state.sort) document.getElementById("sort-select").value = state.sort;
+  if (state.freshness) {
+    document.querySelectorAll("#freshness-tabs .pill").forEach(b => b.classList.toggle("active", b.dataset.val === state.freshness));
+  }
+  if (state.max_exp !== "") {
+    document.querySelectorAll("#exp-tabs .pill").forEach(b => b.classList.toggle("active", b.dataset.val === state.max_exp));
+  }
 }
 
 // ===== KEYBOARD SHORTCUTS =====
@@ -254,7 +264,8 @@ function applyFilters() {
 }
 function clearFilters() {
   state.search = ""; state.type = ""; state.domain = ""; state.source = "";
-  state.seniority = ""; state.sort = "newest"; state.location_scope = "all"; state.remote = null;
+  state.seniority = ""; state.freshness = ""; state.max_exp = "";
+  state.sort = "newest"; state.location_scope = "all"; state.remote = null;
   state.page = 1;
   document.getElementById("search-input").value = "";
   document.getElementById("domain-select").value = "";
@@ -313,6 +324,8 @@ async function loadJobs() {
   if (state.seniority) params.set("seniority", state.seniority);
   if (state.company_category) params.set("company_category", state.company_category);
   if (state.min_salary_lpa) params.set("min_salary_lpa", state.min_salary_lpa);
+  if (state.freshness) params.set("freshness", state.freshness);
+  if (state.max_exp !== undefined && state.max_exp !== "") params.set("max_exp", state.max_exp);
   if (state.sort) params.set("sort", state.sort);
   if (state.location_scope) params.set("location_scope", state.location_scope);
   if (state.remote !== null) params.set("remote", state.remote ? "1" : "0");
@@ -392,7 +405,30 @@ function renderJobCards(jobs) {
     const tags = (j.domain_tags || []).slice(0, 4);
     const isApplied = j.applied || state.appliedIds.has(j.id);
     const domain = extractDomain(directUrl);
-    const logoUrl = domain ? `https://logo.clearbit.com/${domain}` : null;
+    const logoSrc = j.logo_url || (domain ? `https://logo.clearbit.com/${domain}` : null);
+    const companyMonogram = escapeHtml(j.company ? j.company.substring(0, 2).toUpperCase() : "🏢");
+
+    // Freshness tag
+    let freshnessTag = "";
+    if (j.freshness_bucket === "1h") {
+      freshnessTag = '<span class="badge badge-fresh-1h" title="Discovered/Posted within 1 hour!">⚡ &lt; 1h Hot</span>';
+    } else if (j.freshness_bucket === "24h") {
+      freshnessTag = '<span class="badge badge-fresh-24h" title="Discovered/Posted within 24 hours">🔥 Today (&lt;24h)</span>';
+    } else if (j.freshness_bucket === "week") {
+      freshnessTag = '<span class="badge badge-fresh-week" title="Discovered within 7 days">📅 &lt; 7d</span>';
+    } else {
+      freshnessTag = `<span class="badge badge-freshness">${freshnessBadge}</span>`;
+    }
+
+    // Experience badge
+    let expBadge = "";
+    if (j.min_exp_years !== null && j.min_exp_years !== undefined) {
+      if (j.min_exp_years === 0) {
+        expBadge = '<span class="badge badge-exp badge-exp-zero" title="0 Years Required - Perfect for Freshers & Interns">🎓 0 Yrs Exp</span>';
+      } else {
+        expBadge = `<span class="badge badge-exp" title="Minimum ${j.min_exp_years} Year(s) Experience">🎓 ≤ ${j.min_exp_years} Yoe</span>`;
+      }
+    }
 
     // Match score
     const match = calculateMatchScore(j);
@@ -401,7 +437,7 @@ function renderJobCards(jobs) {
     return `<div class="job-card ${j.is_target_match ? 'target-match' : ''} ${isApplied ? 'applied-job' : ''}" onclick="openJobModal('${j.id}')">
       <div class="card-top">
         <div class="company-logo">
-          ${logoUrl ? `<img src="${logoUrl}" onerror="this.style.display='none';this.parentElement.textContent='🏢'" alt="${escapeHtml(j.company)}" />` : '🏢'}
+          ${logoSrc ? `<img src="${logoSrc}" onerror="this.style.display='none';this.parentElement.innerHTML='<span class=\\'logo-monogram\\'>${companyMonogram}</span>'" alt="${escapeHtml(j.company)}" />` : `<span class="logo-monogram">${companyMonogram}</span>`}
         </div>
         <div class="card-title-block">
           <div class="card-title">${escapeHtml(j.title)}</div>
@@ -411,11 +447,12 @@ function renderJobCards(jobs) {
 
       <div class="card-meta">
         ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match" title="Direct match with your active watchlist subscription">🎯 Watchlist Match</span>' : ''}
+        ${freshnessTag}
+        ${expBadge}
         <span class="badge badge-type">${j.job_type === 'internship' ? '🎓 Internship' : '💼 Fresher Job'}</span>
         <span class="badge ${scoreBadge}" title="Resume match based on your skills profile">🎯 ${match.score}% Match</span>
         <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>
         <span class="badge badge-verified" title="Link verified active (200 OK)">✅ Verified Link</span>
-        <span class="badge badge-freshness">${freshnessBadge}</span>
         <span class="badge ${catInfo.cls}">${catInfo.icon} ${catInfo.label}</span>
         ${j.salary_display ? `<span class="badge badge-salary">💰 ${escapeHtml(j.salary_display)}</span>` : ''}
         ${j.remote ? '<span class="badge badge-remote">🌍 Remote</span>' : ''}
@@ -795,6 +832,8 @@ function exportCSV() {
   if (state.type) params.set("type", state.type);
   if (state.domain) params.set("domain", state.domain);
   if (state.seniority) params.set("seniority", state.seniority);
+  if (state.freshness) params.set("freshness", state.freshness);
+  if (state.max_exp !== undefined && state.max_exp !== "") params.set("max_exp", state.max_exp);
   if (state.location_scope) params.set("location_scope", state.location_scope);
   window.open(`/api/export/csv?${params}`, "_blank");
 }

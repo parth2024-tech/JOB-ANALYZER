@@ -136,3 +136,64 @@ class TestScraperEngine:
                 counts = await scraper.scrape_all()
                 assert isinstance(counts, dict)
                 assert all(isinstance(v, int) for v in counts.values())
+
+    @pytest.mark.asyncio
+    async def test_scrape_linkedin_guest(self, temp_db):
+        """Test LinkedIn Guest scraper parsing."""
+        async with ScraperEngine("/home/thor/Desktop/linkedin/config.yaml", temp_db) as scraper:
+            src = SourceConfig(
+                name="LinkedIn Test",
+                url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=cybersecurity+intern&geoId=102713980",
+                type="linkedin_guest",
+            )
+            sample_html = """
+            <ul>
+              <li>
+                <div class="base-card">
+                  <a class="base-card__full-link" href="https://in.linkedin.com/jobs/view/cyber-intern-12345?refId=abc"></a>
+                  <h3 class="base-search-card__title">Cybersecurity Operations Intern</h3>
+                  <h4 class="base-search-card__subtitle"><a href="#">CloudSec India</a></h4>
+                  <span class="job-search-card__location">Bangalore, Karnataka, India</span>
+                  <time datetime="2026-09-29">1 day ago</time>
+                  <img class="artdeco-entity-image" data-delayed-url="https://media.licdn.com/logo.png" />
+                </div>
+              </li>
+            </ul>
+            """
+            with patch.object(scraper, "fetch", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = sample_html
+                new_jobs, total = await scraper.scrape_linkedin_guest(src)
+                assert total >= 1
+                assert new_jobs >= 1
+
+    @pytest.mark.asyncio
+    async def test_scrape_remotive(self, temp_db):
+        """Test Remotive scraper parsing."""
+        import json
+
+        async with ScraperEngine("/home/thor/Desktop/linkedin/config.yaml", temp_db) as scraper:
+            src = SourceConfig(
+                name="Remotive Test",
+                url="https://remotive.com/api/remote-jobs",
+                type="remotive",
+            )
+            sample_data = {
+                "jobs": [
+                    {
+                        "id": 101,
+                        "title": "Junior Application Security Analyst",
+                        "company_name": "CloudGuard",
+                        "candidate_required_location": "Worldwide",
+                        "url": "https://remotive.com/jobs/101",
+                        "tags": ["security", "appsec"],
+                        "description": "Fresher entry-level application security position",
+                        "company_logo": "https://remotive.com/logo.png",
+                        "publication_date": "2026-09-29T10:00:00Z",
+                    }
+                ]
+            }
+            with patch.object(scraper, "fetch", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = json.dumps(sample_data)
+                new_jobs, total = await scraper.scrape_remotive(src)
+                assert total == 1
+                assert new_jobs == 1

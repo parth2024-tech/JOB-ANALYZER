@@ -307,3 +307,67 @@ class TestSubscriptionsAndTrends:
         assert isinstance(trends["correlation_matrix"], list)
         assert isinstance(trends["timeline"], list)
 
+    def test_experience_parsing_and_freshness_bucketing(self, temp_db):
+        """Test year ranges parsing, freshness buckets, and max_exp filtering."""
+        from datetime import datetime, timedelta, timezone
+
+        from database import (
+            compute_freshness_bucket,
+            extract_min_exp_years,
+            is_fresher_or_intern,
+            parse_year_ranges,
+        )
+        from scraper import JobEntry
+
+        # 1. Test parse_year_ranges
+        ranges = parse_year_ranges("Requires 1-3 years of experience in cybersecurity")
+        assert ranges == [(1, 3)]
+
+        ranges2 = parse_year_ranges("0-1 yoe, graduate welcome")
+        assert ranges2 == [(0, 1)]
+
+        # 2. Test extract_min_exp_years
+        assert extract_min_exp_years("Cyber Security Intern", "Internship role") == 0.0
+        assert extract_min_exp_years("Junior Security Analyst", "Requires 1-2 years experience") == 1.0
+
+        # 3. Test is_fresher_or_intern rejection of senior experience (>2 years)
+        assert is_fresher_or_intern("Cyber Security Analyst", "Requires 3-5 years experience") is False
+        assert is_fresher_or_intern("Cyber Security Intern", "No experience required") is True
+
+        # 4. Test compute_freshness_bucket
+        now_iso = datetime.now(timezone.utc).isoformat()
+        assert compute_freshness_bucket(now_iso, now_iso) == "1h"
+        yesterday_iso = (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat()
+        assert compute_freshness_bucket(yesterday_iso, yesterday_iso) == "24h"
+        old_iso = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat()
+        assert compute_freshness_bucket(old_iso, old_iso) == "week"
+
+        # 5. Insert job with logo_url and min_exp_years
+        keywords = ["appsec", "soc", "infosec"]
+        job = JobEntry(
+            id="exp-1",
+            source="LinkedIn Guest",
+            source_url="https://linkedin.com",
+            title="Cybersecurity Operations Intern",
+            company="TECEZE",
+            location="Chennai, India",
+            remote=False,
+            job_type="internship",
+            domain_tags=["soc"],
+            description="Internship role for fresh graduates",
+            apply_url="https://linkedin.com/jobs/view/12345",
+            posted_date=now_iso,
+            logo_url="https://media.licdn.com/dms/image/company-logo.png",
+            min_exp_years=0.0,
+        )
+        assert temp_db.insert_job(job, keywords) is True
+
+        # Verify get_jobs_filtered returns logo_url, min_exp_years, and freshness_bucket
+        res = temp_db.get_jobs_filtered(search="TECEZE", freshness="1h", max_exp=0.0)
+        assert res["total"] == 1
+        item = res["items"][0]
+        assert item["company"] == "TECEZE"
+        assert item["logo_url"] == "https://media.licdn.com/dms/image/company-logo.png"
+        assert item["min_exp_years"] == 0.0
+        assert item["freshness_bucket"] == "1h"
+

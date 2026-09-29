@@ -41,6 +41,7 @@
     <button class="icon-btn action-pill-btn" onclick="toggleTrendsModal()" title="Market Intelligence & Correlation Matrix">📈 Trends</button>
     <button class="icon-btn action-pill-btn" onclick="toggleProfileModal()" title="Resume & Skills Keyword Matcher">🎯 Matcher</button>
     <button class="icon-btn action-pill-btn" onclick="toggleInterviewModal()" title="Cybersecurity Interview Technical Cheat Sheet">💡 Prep</button>
+    <button class="icon-btn action-pill-btn" onclick="exportCSV()" title="Download Filtered Radar as CSV">📥 Export CSV</button>
     <button id="sound-toggle" class="icon-btn" onclick="toggleSound()" title="Toggle Cyber Audio FX">🔊</button>
     <button id="theme-toggle" class="icon-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌙</button>
     <button class="icon-btn" onclick="toggleSourcesDrawer()" title="Source Health">📡</button>
@@ -94,6 +95,28 @@
         <button class="pill" data-val="internship" onclick="setFilter('location_scope', 'internship', this, 'scope-tabs')">🎓 Internships Only</button>
         <button class="pill" data-val="subscriptions" onclick="setFilter('location_scope', 'subscriptions', this, 'scope-tabs')">🎯 Watchlist Matches</button>
         <button class="pill" data-val="fresher" onclick="setFilter('location_scope', 'fresher', this, 'scope-tabs')">💼 Fresher Jobs Only</button>
+      </div>
+    </div>
+
+    <!-- Freshness Buckets -->
+    <div class="filter-group">
+      <label class="filter-label">Freshness</label>
+      <div class="tab-pills" id="freshness-tabs">
+        <button class="pill active" data-val="" onclick="setFilter('freshness', '', this, 'freshness-tabs')">All (≤14d)</button>
+        <button class="pill" data-val="1h" onclick="setFilter('freshness', '1h', this, 'freshness-tabs')">⚡ Hot (&lt;1h)</button>
+        <button class="pill" data-val="24h" onclick="setFilter('freshness', '24h', this, 'freshness-tabs')">🔥 Today (&lt;24h)</button>
+        <button class="pill" data-val="week" onclick="setFilter('freshness', 'week', this, 'freshness-tabs')">📅 &lt;7d</button>
+      </div>
+    </div>
+
+    <!-- Experience Required -->
+    <div class="filter-group">
+      <label class="filter-label">Experience</label>
+      <div class="tab-pills" id="exp-tabs">
+        <button class="pill active" data-val="" onclick="setFilter('max_exp', '', this, 'exp-tabs')">All Exp</button>
+        <button class="pill" data-val="0" onclick="setFilter('max_exp', '0', this, 'exp-tabs')">🎓 0 Yoe (Intern/Entry)</button>
+        <button class="pill" data-val="1" onclick="setFilter('max_exp', '1', this, 'exp-tabs')">🎓 ≤ 1 Yr</button>
+        <button class="pill" data-val="2" onclick="setFilter('max_exp', '2', this, 'exp-tabs')">🎓 ≤ 2 Yrs</button>
       </div>
     </div>
 
