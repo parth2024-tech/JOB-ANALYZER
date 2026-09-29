@@ -18,6 +18,8 @@ const state = {
   kanbanStages: JSON.parse(localStorage.getItem("kanbanStages") || "{}"),
   currentJobForPitch: null,
   currentPitchTab: "linkedin",
+  subscriptions: [],
+  trendsData: null,
 };
 
 // ===== INIT =====
@@ -29,6 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadStats();
   loadDomains();
   loadSources();
+  loadSubscriptions();
   setupSearch();
   setupKeyboard();
   connectWebSocket();
@@ -407,6 +410,7 @@ function renderJobCards(jobs) {
       </div>
 
       <div class="card-meta">
+        ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match" title="Direct match with your active watchlist subscription">🎯 Watchlist Match</span>' : ''}
         <span class="badge badge-type">${j.job_type === 'internship' ? '🎓 Internship' : '💼 Fresher Job'}</span>
         <span class="badge ${scoreBadge}" title="Resume match based on your skills profile">🎯 ${match.score}% Match</span>
         <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>
@@ -430,6 +434,7 @@ function renderJobCards(jobs) {
       <div class="card-actions" onclick="event.stopPropagation()">
         <a class="btn-card apply" href="${escapeHtml(directUrl)}" target="_blank" rel="noopener" title="Direct verified application URL">🔗 Apply</a>
         <button class="btn-card" onclick="openPitchGenerator('${j.id}')" title="Generate tailored cold message & cover letter">⚡ Pitch</button>
+        <button class="btn-card" onclick="openSubscribeForJob('${escapeHtml(j.company)}', '${escapeHtml(j.title)}')" title="Watchlist this company & role">🔔</button>
         <button class="btn-card" onclick="openRecruiterSearch('${escapeHtml(j.company)}')" title="Find recruiters & hiring managers on LinkedIn">👥 Recruiter</button>
         <button class="btn-card ${isApplied ? 'mark-applied done' : 'mark-applied'}"
           onclick="${isApplied ? `unmarkApplied('${j.id}', this)` : `markApplied('${j.id}', this)`}">
@@ -456,6 +461,7 @@ function renderJobTable(jobs) {
     return `<tr onclick="openJobModal('${j.id}')">
       <td class="td-title" data-label="Title">
         ${escapeHtml(j.title)}
+        ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match" style="font-size:0.68rem;padding:1px 6px;margin-left:4px" title="Matched Watchlist">🎯 Watchlist</span>' : ''}
         <span class="badge ${scoreBadge}" style="font-size:0.68rem;padding:1px 6px;margin-left:4px">🎯 ${match.score}%</span>
       </td>
       <td data-label="Company">${escapeHtml(j.company)}</td>
@@ -467,6 +473,7 @@ function renderJobTable(jobs) {
         <div style="display:flex;gap:4px;align-items:center">
           <a class="btn-card apply" href="${escapeHtml(directUrl)}" target="_blank" rel="noopener" style="display:inline-flex;padding:4px 10px;font-size:0.75rem">Apply</a>
           <button class="btn-sm" onclick="openPitchGenerator('${j.id}')" title="Pitch Generator">⚡</button>
+          <button class="btn-sm" onclick="openSubscribeForJob('${escapeHtml(j.company)}', '${escapeHtml(j.title)}')" title="Watchlist">🔔</button>
         </div>
       </td>
       <td data-label="Applied?" onclick="event.stopPropagation()">
@@ -645,6 +652,7 @@ async function openJobModal(jobId) {
     body.innerHTML = `
       <div class="job-detail-section">
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;align-items:center">
+          ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match">🎯 Watchlist Match</span>' : ''}
           <span class="badge ${scoreBadge}">🎯 ${match.score}% Match</span>
           <span class="badge badge-type">${j.job_type === 'internship' ? '🎓 Internship' : '💼 Fresher Job'}</span>
           <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>
@@ -674,6 +682,7 @@ async function openJobModal(jobId) {
         <div class="apply-hub">
           <a class="apply-btn primary" href="${escapeHtml(routes.direct_url || '#')}" target="_blank" rel="noopener">🎯 Direct Apply (Verified Active)</a>
           <button class="apply-btn" onclick="openPitchGenerator('${j.id}')">⚡ Instant Pitch & Cover Letter</button>
+          <button class="apply-btn" onclick="openSubscribeForJob('${escapeHtml(j.company)}', '${escapeHtml(j.title)}')">🔔 Watchlist Company & Role</button>
           <button class="apply-btn" onclick="openRecruiterSearch('${escapeHtml(j.company)}')">👥 Find Recruiters on LinkedIn</button>
           <button class="apply-btn" onclick="openCompanyResearch('${escapeHtml(j.company)}', 'levels')">💰 Levels.fyi Salaries</button>
           <button class="apply-btn" onclick="openCompanyResearch('${escapeHtml(j.company)}', 'glassdoor')">⭐ Glassdoor Reviews</button>
@@ -1434,6 +1443,298 @@ function extractAndApplySkillsFromText(text) {
   renderQuickSkillsChips();
   playCyberSound('pitch');
   showToast(`🎯 Auto-extracted ${detected.length} skills from resume!`, 3000);
+}
+
+// =========================================================================
+// 🔔 JOBSCOOP WATCHLIST SUBSCRIPTIONS & MARKET INTELLIGENCE ENGINE
+// =========================================================================
+
+function toggleSubscriptionsModal() {
+  const overlay = document.getElementById("subscriptions-modal-overlay");
+  if (!overlay) return;
+  const isHidden = overlay.classList.contains("hidden");
+  if (isHidden) {
+    overlay.classList.remove("hidden");
+    loadSubscriptions();
+  } else {
+    overlay.classList.add("hidden");
+  }
+}
+
+async function loadSubscriptions() {
+  const listEl = document.getElementById("subscriptions-list");
+  const countEl = document.getElementById("subscriptions-count");
+  const navCountEl = document.getElementById("nav-subs-count");
+
+  try {
+    const res = await fetch("/api/subscriptions");
+    if (!res.ok) throw new Error("Failed to load subscriptions");
+    const data = await res.json();
+    state.subscriptions = data.subscriptions || [];
+
+    const activeCount = state.subscriptions.filter(s => s.active).length;
+    if (countEl) countEl.textContent = state.subscriptions.length;
+    if (navCountEl) {
+      navCountEl.textContent = activeCount;
+      navCountEl.classList.toggle("hidden", activeCount === 0);
+    }
+
+    if (!listEl) return;
+    if (!state.subscriptions.length) {
+      listEl.innerHTML = `
+        <div class="empty-state" style="padding:20px 0;">
+          <div class="empty-icon">🔔</div>
+          <p>No watchlists configured yet. Add your favorite company or role above!</p>
+        </div>`;
+      return;
+    }
+
+    listEl.innerHTML = state.subscriptions.map(sub => {
+      const comp = sub.company || "*";
+      const role = sub.role || "*";
+      const matches = sub.match_count || 0;
+      const isActive = sub.active;
+
+      // Generate 1-click external cross-search URLs
+      const qComp = comp === "*" ? "" : comp;
+      const qRole = role === "*" ? "" : role;
+      const qStr = encodeURIComponent(`${qComp} ${qRole} cybersecurity`.trim());
+      const gJobsUrl = `https://www.google.com/search?q=${qStr}+jobs`;
+      const linkedInUrl = `https://www.linkedin.com/jobs/search/?keywords=${qStr}`;
+      const indeedUrl = `https://www.indeed.com/jobs?q=${qStr}`;
+
+      return `
+        <div class="subscription-card ${isActive ? '' : 'inactive'}" id="sub-card-${sub.id}">
+          <div class="sub-info">
+            <div class="sub-title-row">
+              <span class="sub-company-tag">🏢 ${escapeHtml(comp)}</span>
+              <span class="sub-role-tag">🎯 ${escapeHtml(role)}</span>
+              <span class="sub-matches-badge" title="Live matching opportunities in grid">${matches} live match${matches !== 1 ? 'es' : ''}</span>
+              ${sub.notify_telegram ? '<span title="Telegram notifications active">⚡ TG</span>' : ''}
+            </div>
+          </div>
+          <div class="sub-card-actions">
+            <a href="${gJobsUrl}" target="_blank" rel="noopener" class="btn-ext-search" title="Search Google Jobs">🌐 Google</a>
+            <a href="${linkedInUrl}" target="_blank" rel="noopener" class="btn-ext-search" title="Search LinkedIn Jobs">💼 LinkedIn</a>
+            <a href="${indeedUrl}" target="_blank" rel="noopener" class="btn-ext-search" title="Search Indeed">🔍 Indeed</a>
+            <button class="btn-toggle-sub ${isActive ? 'active' : ''}" onclick="toggleSubscriptionActive(${sub.id})">
+              ${isActive ? 'Active' : 'Paused'}
+            </button>
+            <button class="btn-sm" style="color:var(--danger)" onclick="deleteSubscription(${sub.id})" title="Delete watchlist">🗑️</button>
+          </div>
+        </div>`;
+    }).join("");
+  } catch (err) {
+    if (listEl) listEl.innerHTML = `<p style="color:var(--danger)">Error: ${err.message}</p>`;
+  }
+}
+
+async function handleCreateSubscription(e) {
+  e.preventDefault();
+  const companyInput = document.getElementById("sub-company-input");
+  const roleInput = document.getElementById("sub-role-input");
+  const tgCheck = document.getElementById("sub-telegram-check");
+
+  const company = (companyInput ? companyInput.value : "").trim();
+  const role = (roleInput ? roleInput.value : "").trim();
+  const notify_telegram = tgCheck ? tgCheck.checked : true;
+
+  if (!company && !role) {
+    showToast("⚠️ Enter at least a target company or role keyword", 3000);
+    return;
+  }
+
+  try {
+    const res = await fetch("/api/subscriptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ company, role, notify_telegram })
+    });
+    if (!res.ok) throw new Error("Could not create watchlist");
+    showToast("🎯 Watchlist subscription added!", 2500);
+    if (companyInput) companyInput.value = "";
+    if (roleInput) roleInput.value = "";
+    playCyberSound('apply');
+    await loadSubscriptions();
+    loadJobs();
+  } catch (err) {
+    showToast(`⚠️ ${err.message}`, 3000);
+  }
+}
+
+async function toggleSubscriptionActive(subId) {
+  try {
+    const res = await fetch(`/api/subscriptions/${subId}/toggle`, { method: "PATCH" });
+    if (!res.ok) throw new Error("Could not toggle");
+    playCyberSound('click');
+    await loadSubscriptions();
+    loadJobs();
+  } catch (err) {
+    showToast(`⚠️ ${err.message}`, 3000);
+  }
+}
+
+async function deleteSubscription(subId) {
+  if (!confirm("Remove this watchlist subscription?")) return;
+  try {
+    const res = await fetch(`/api/subscriptions/${subId}`, { method: "DELETE" });
+    if (!res.ok) throw new Error("Could not delete");
+    showToast("Watchlist deleted", 2000);
+    playCyberSound('click');
+    await loadSubscriptions();
+    loadJobs();
+  } catch (err) {
+    showToast(`⚠️ ${err.message}`, 3000);
+  }
+}
+
+function openSubscribeForJob(company, title) {
+  toggleSubscriptionsModal();
+  const companyInput = document.getElementById("sub-company-input");
+  const roleInput = document.getElementById("sub-role-input");
+  if (companyInput && company && company !== "Unknown") {
+    companyInput.value = company;
+  }
+  if (roleInput && title) {
+    roleInput.value = title.replace(/\(.*?\)/g, "").trim();
+  }
+}
+
+// ===== TRENDS & CORRELATION MATRIX =====
+function toggleTrendsModal() {
+  const overlay = document.getElementById("trends-modal-overlay");
+  if (!overlay) return;
+  const isHidden = overlay.classList.contains("hidden");
+  if (isHidden) {
+    overlay.classList.remove("hidden");
+    loadTrends(30);
+  } else {
+    overlay.classList.add("hidden");
+  }
+}
+
+async function loadTrends(days = 30, btnEl = null) {
+  if (btnEl) {
+    document.querySelectorAll("#trends-time-tabs .pill").forEach(p => p.classList.remove("active"));
+    btnEl.classList.add("active");
+  }
+
+  const tbody = document.getElementById("correlation-table-body");
+  const kpiEl = document.getElementById("trends-total-tracked");
+  if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;">⟳ Calculating correlation matrix...</td></tr>`;
+
+  try {
+    const res = await fetch(`/api/trends/summary?days=${days}`);
+    if (!res.ok) throw new Error("Failed to load trends");
+    const data = await res.json();
+    state.trendsData = data;
+
+    if (kpiEl) {
+      kpiEl.textContent = `Tracked: ${data.total_jobs.toLocaleString()} jobs (${days === 0 ? 'All Time' : `${days} Days`})`;
+    }
+
+    // Render Trends Charts
+    renderTrendsCharts(data);
+
+    // Render Correlation Matrix Table
+    if (!tbody) return;
+    const correlations = data.correlation_matrix || [];
+    if (!correlations.length) {
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text-muted);">No correlation data for this timeframe</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = correlations.map(row => {
+      return `
+        <tr class="correlation-row" onclick="filterByCorrelation('${escapeHtml(row.company)}', '${escapeHtml(row.role)}')">
+          <td style="font-weight:600;color:var(--text-primary);">🏢 ${escapeHtml(row.company)}</td>
+          <td><span class="sub-role-tag">🎯 ${escapeHtml(row.role)}</span></td>
+          <td><span class="correlation-freq-badge">${row.count} jobs</span></td>
+          <td>
+            <div class="correlation-bar-container">
+              <div class="correlation-bar">
+                <div class="correlation-bar-fill" style="width:${Math.min(100, row.percentage * 4)}%"></div>
+              </div>
+              <span style="font-size:0.75rem;color:var(--text-secondary);">${row.percentage}%</span>
+            </div>
+          </td>
+          <td>
+            <button class="btn-sm" title="View jobs for ${escapeHtml(row.company)}">View Jobs ➔</button>
+          </td>
+        </tr>`;
+    }).join("");
+  } catch (err) {
+    if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="color:var(--danger)">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function renderTrendsCharts(data) {
+  const isDark = document.documentElement.getAttribute("data-theme") !== "light";
+  const gridColor = isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.05)";
+
+  // 1. Top Companies Horizontal Bar Chart
+  const topComps = data.top_companies || [];
+  const compCtx = document.getElementById("chart-trends-companies");
+  if (compCtx && topComps.length) {
+    if (state.charts["chart-trends-companies"]) state.charts["chart-trends-companies"].destroy();
+    state.charts["chart-trends-companies"] = new Chart(compCtx, {
+      type: "bar",
+      data: {
+        labels: topComps.map(c => c.company),
+        datasets: [{
+          data: topComps.map(c => c.count),
+          backgroundColor: "rgba(0, 212, 136, 0.75)",
+          borderRadius: 4
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: gridColor }, ticks: { font: { size: 9 } } },
+          y: { grid: { display: false }, ticks: { font: { size: 9 } } }
+        }
+      }
+    });
+  }
+
+  // 2. In-Demand Roles Doughnut Chart
+  const topRoles = data.top_roles || [];
+  const roleCtx = document.getElementById("chart-trends-roles");
+  if (roleCtx && topRoles.length) {
+    if (state.charts["chart-trends-roles"]) state.charts["chart-trends-roles"].destroy();
+    const colors = ["#00d488", "#3b82f6", "#a855f7", "#f59e0b", "#ec4899", "#14b8a6", "#6366f1", "#eab308", "#84cc16", "#06b6d4"];
+    state.charts["chart-trends-roles"] = new Chart(roleCtx, {
+      type: "doughnut",
+      data: {
+        labels: topRoles.map(r => r.role),
+        datasets: [{
+          data: topRoles.map(r => r.count),
+          backgroundColor: colors.slice(0, topRoles.length),
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          legend: { position: "right", labels: { font: { size: 10 }, boxWidth: 10, padding: 6 } }
+        },
+        cutout: "60%"
+      }
+    });
+  }
+}
+
+function filterByCorrelation(company, role) {
+  toggleTrendsModal();
+  state.search = `${company} ${role}`;
+  state.location_scope = "all";
+  document.getElementById("search-input").value = state.search;
+  document.querySelectorAll("#scope-tabs .pill").forEach(p => p.classList.toggle("active", p.dataset.val === "all"));
+  state.page = 1;
+  applyFilters();
+  showToast(`🔍 Filtered grid: ${company} • ${role}`, 3000);
 }
 
 

@@ -26,7 +26,7 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_run_once_updates_stats(self, temp_db):
         """Test that run_once updates database stats."""
-        scraper = CyberSecJobScraper("/home/thor/Desktop/linkedin/config.yaml", test_mode=True)
+        _ = CyberSecJobScraper("/home/thor/Desktop/linkedin/config.yaml", test_mode=True)
         
         # Add some initial jobs
         from datetime import datetime, timedelta, timezone

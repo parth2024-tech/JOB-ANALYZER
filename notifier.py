@@ -113,10 +113,11 @@ class TelegramNotifier:
 
             is_t1 = any(t in company.lower() for t in self.TIER1_COMPANIES)
             t1_badge = " ⭐<b>[Tier-1 Cyber]</b>" if is_t1 else ""
+            sub_badge = " 🎯<b>[WATCHLIST MATCH]</b>" if job.get("is_subscribed_match") else ""
             type_emoji = "🎓" if job_type == "internship" else "💼"
 
             lines.append(
-                f"{i}. {type_emoji} <b>{title}</b>{t1_badge}\n"
+                f"{i}. {type_emoji} <b>{title}</b>{sub_badge}{t1_badge}\n"
                 f"   🏢 {company} • 📍 {location}\n"
                 f"   🔗 <a href='{direct}'>Apply Now</a> | <a href='{recruiter}'>👥 Find Recruiters</a>"
             )
@@ -137,9 +138,10 @@ class TelegramNotifier:
 
             is_t1 = any(t in company.lower() for t in self.TIER1_COMPANIES)
             t1_badge = " ⭐<b>[Tier-1 Cyber]</b>" if is_t1 else ""
+            sub_badge = " 🎯<b>[WATCHLIST MATCH]</b>" if job.get("is_subscribed_match") else ""
 
             lines.append(
-                f"{i}. 🎓 <b>{title}</b>{t1_badge}\n"
+                f"{i}. 🎓 <b>{title}</b>{sub_badge}{t1_badge}\n"
                 f"   🌍 {company} • {location}\n"
                 f"   🔗 <a href='{direct}'>Apply Now</a> | <a href='{recruiter}'>👥 Find Recruiters</a>"
             )
@@ -169,6 +171,7 @@ class TelegramNotifier:
             seniority_badge = {"junior": "🟢 Junior", "mid": "🔵 Mid", "senior": "🟡 Senior",
                                "lead": "🟠 Lead", "manager": "🔴 Manager"}.get(seniority, "🔵")
             tag_str = " ".join([f"#{t.replace(' ', '')}" for t in tags[:3]])
+            sub_badge = " 🎯<b>[WATCHLIST MATCH]</b>" if job.get("is_subscribed_match") else ""
 
             from database import is_india_location, is_target_opportunity
             if is_india_location(location):
@@ -179,7 +182,7 @@ class TelegramNotifier:
                 scope_tag = ""
 
             lines.append(
-                f"{i}. {type_emoji} <b>{title}</b>\n"
+                f"{i}. {type_emoji} <b>{title}</b>{sub_badge}\n"
                 f"   {scope_tag}{remote_emoji} {company} • {location}\n"
                 f"   {seniority_badge} {tag_str}\n"
                 f"   🔗 <a href='{direct}'>Apply Here</a> | {source}"
@@ -194,6 +197,19 @@ class TelegramNotifier:
         """Send formatted job alert with dedup check and India-priority split."""
         if not jobs:
             return True
+
+        # Pre-tag watchlist subscription matches if db is provided
+        if db and hasattr(db, "get_active_subscriptions") and hasattr(db, "match_subscription"):
+            try:
+                active_subs = db.get_active_subscriptions()
+                if active_subs:
+                    for j in jobs:
+                        matched = db.match_subscription(j.get("title", ""), j.get("company", ""), active_subs)
+                        if matched:
+                            j["is_subscribed_match"] = True
+                            j["matched_subscription"] = matched
+            except Exception as e:
+                logger.error(f"Error checking subscriptions during alert: {e}")
 
         fingerprint = self._fingerprint(jobs)
         if db and db.is_alert_sent(fingerprint):

@@ -756,4 +756,301 @@ body {
   transform: scale(0.95);
 }
 
+/* ===== JOBSCOOP WATCHLIST & TRENDS ===== */
+.highlight-pill {
+  border-color: rgba(245, 158, 11, 0.4) !important;
+  color: #f59e0b !important;
+  background: rgba(245, 158, 11, 0.1) !important;
+}
+.highlight-pill:hover {
+  background: rgba(245, 158, 11, 0.2) !important;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+.badge-counter {
+  display: inline-block;
+  background: #f59e0b;
+  color: #000;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+}
+
+/* Watchlist Subscriptions Form */
+.subscription-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+}
+.sub-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 12px;
+  align-items: flex-end;
+}
+@media (max-width: 768px) {
+  .sub-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+.sub-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sub-input {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 0.85rem;
+  outline: none;
+  transition: 0.2s;
+}
+.sub-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+.sub-checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sub-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* Subscriptions List */
+.sub-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.sub-list-header h3 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.subscriptions-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+.subscription-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  transition: 0.2s;
+}
+.subscription-card:hover {
+  border-color: var(--accent);
+}
+.subscription-card.inactive {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.sub-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sub-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sub-company-tag {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+.sub-role-tag {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+.sub-matches-badge {
+  background: rgba(0, 212, 136, 0.15);
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 212, 136, 0.3);
+}
+.sub-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.btn-toggle-sub {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  transition: 0.2s;
+}
+.btn-toggle-sub.active {
+  background: rgba(0, 212, 136, 0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.btn-ext-search {
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  border-radius: 6px;
+  text-decoration: none;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  transition: 0.2s;
+}
+.btn-ext-search:hover {
+  border-color: var(--info);
+  color: var(--info);
+}
+
+/* Watchlist Match Badge on Cards */
+.badge-watchlist-match {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(234, 88, 12, 0.25)) !important;
+  color: #fbbf24 !important;
+  border: 1px solid rgba(245, 158, 11, 0.6) !important;
+  font-weight: 700 !important;
+  box-shadow: 0 0 10px rgba(245, 158, 11, 0.2);
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(245, 158, 11, 0.2); }
+  50% { box-shadow: 0 0 16px rgba(245, 158, 11, 0.45); }
+}
+
+/* Trends Modal & Correlation Matrix */
+.trends-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.trends-charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+@media (max-width: 850px) {
+  .trends-charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.correlation-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+}
+.correlation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.correlation-header h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.correlation-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.correlation-table-wrapper {
+  overflow-x: auto;
+  max-height: 320px;
+}
+.correlation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.correlation-table th, .correlation-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+.correlation-table th {
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary);
+  z-index: 2;
+}
+.correlation-row {
+  cursor: pointer;
+  transition: 0.15s;
+}
+.correlation-row:hover {
+  background: rgba(0, 212, 136, 0.08);
+}
+.correlation-freq-badge {
+  background: rgba(0, 212, 136, 0.15);
+  color: var(--accent);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+.correlation-bar-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.correlation-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  max-width: 100px;
+}
+.correlation-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+}
+
 

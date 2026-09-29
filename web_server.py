@@ -97,6 +97,14 @@ class CyberSecWebServer:
         # Scrape trigger
         self.app.router.add_post("/api/scrape", self.handle_api_scrape)
 
+        # JobScoop Subscriptions & Trends
+        self.app.router.add_get("/api/subscriptions", self.handle_api_subscriptions)
+        self.app.router.add_post("/api/subscriptions", self.handle_api_create_subscription)
+        self.app.router.add_delete("/api/subscriptions/{id}", self.handle_api_delete_subscription)
+        self.app.router.add_patch("/api/subscriptions/{id}/toggle", self.handle_api_toggle_subscription)
+        self.app.router.add_get("/api/trends/summary", self.handle_api_trends_summary)
+        self.app.router.add_get("/api/search/external", self.handle_api_external_search)
+
         # Startup / shutdown hooks
         self.app.on_startup.append(self._on_startup)
         self.app.on_shutdown.append(self._on_shutdown)
@@ -352,6 +360,81 @@ class CyberSecWebServer:
         self.db.unmark_applied(job_id)
         return web.json_response({"status": "removed", "job_id": job_id})
 
+    # ========== JobScoop Subscriptions & Trends ==========
+    async def handle_api_subscriptions(self, request: web.Request) -> web.Response:
+        subs = self.db.get_subscriptions()
+        return web.json_response({"subscriptions": subs, "total": len(subs)})
+
+    async def handle_api_create_subscription(self, request: web.Request) -> web.Response:
+        try:
+            body = await request.json()
+            company = str(body.get("company", "")).strip()
+            role = str(body.get("role", "")).strip()
+            notify_telegram = bool(body.get("notify_telegram", True))
+        except Exception:
+            return web.json_response({"error": "Invalid JSON body"}, status=400)
+
+        if not company and not role:
+            return web.json_response({"error": "At least company or role must be provided"}, status=400)
+
+        sub_id = self.db.add_subscription(company or "*", role or "*", notify_telegram)
+        return web.json_response({
+            "status": "created",
+            "subscription": {
+                "id": sub_id,
+                "company": company or "*",
+                "role": role or "*",
+                "active": True,
+                "notify_telegram": notify_telegram
+            }
+        }, status=201)
+
+    async def handle_api_delete_subscription(self, request: web.Request) -> web.Response:
+        sub_id = request.match_info.get("id", "")
+        try:
+            sub_id_int = int(sub_id)
+        except ValueError:
+            return web.json_response({"error": "Invalid subscription ID"}, status=400)
+
+        self.db.delete_subscription(sub_id_int)
+        return web.json_response({"status": "deleted", "id": sub_id_int})
+
+    async def handle_api_toggle_subscription(self, request: web.Request) -> web.Response:
+        sub_id = request.match_info.get("id", "")
+        try:
+            sub_id_int = int(sub_id)
+        except ValueError:
+            return web.json_response({"error": "Invalid subscription ID"}, status=400)
+
+        self.db.toggle_subscription(sub_id_int)
+        return web.json_response({"status": "toggled", "id": sub_id_int})
+
+    async def handle_api_trends_summary(self, request: web.Request) -> web.Response:
+        try:
+            days = int(request.query.get("days", 30))
+        except ValueError:
+            days = 30
+        trends = self.db.get_trends_summary(days=days)
+        return web.json_response(trends)
+
+    async def handle_api_external_search(self, request: web.Request) -> web.Response:
+        import urllib.parse
+        company = request.query.get("company", "").strip()
+        role = request.query.get("role", "").strip()
+
+        q_comp = "" if company in ("*", "all") else company
+        q_role = "" if role in ("*", "all") else role
+        search_query = f"{q_comp} {q_role} cybersecurity".strip()
+
+        return web.json_response({
+            "company": company,
+            "role": role,
+            "query": search_query,
+            "google_jobs_url": f"https://www.google.com/search?q={urllib.parse.quote_plus(search_query + ' jobs')}",
+            "linkedin_jobs_url": f"https://www.linkedin.com/jobs/search/?keywords={urllib.parse.quote_plus(search_query)}",
+            "indeed_jobs_url": f"https://www.indeed.com/jobs?q={urllib.parse.quote_plus(search_query)}"
+        })
+
     # ========== CSV Export ==========
     async def handle_api_export_csv(self, request: web.Request) -> web.Response:
         params = request.query
@@ -523,7 +606,7 @@ def start_server(host: str = "0.0.0.0", port: int = 8080,
 if __name__ == "__main__":
     import argparse
     import os
-    env_port = int(os.environ.get("PORT", 8080))
+    env_port = int(os.environ.get("PORT", "8080"))
     parser = argparse.ArgumentParser(description="CyberSec Tactical Job Dashboard v3")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=env_port)

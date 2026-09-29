@@ -169,15 +169,13 @@ class ScraperEngine:
             print(f"[ERROR] {src.name}: {e}")
         finally:
             latency_ms = (time.time() - start_time) * 1000
-            try:
-                self.db.log_scrape_run(src.name, new_jobs, total_fetched, status, error)
-                # Record health metrics
-                if not hasattr(self, '_health_tracker'):
-                    from database import SourceHealthTracker
-                    self._health_tracker = SourceHealthTracker(self.db)
-                self._health_tracker.record_run(src.name, status == "ok", total_fetched, new_jobs, latency_ms, error)
-            except Exception:
-                pass
+            # Use asyncio.to_thread for database operations to prevent event loop blocking under heavy concurrency
+            await asyncio.to_thread(self.db.log_scrape_run, src.name, new_jobs, total_fetched, status, error)
+            # Record health metrics
+            if not hasattr(self, '_health_tracker'):
+                from database import SourceHealthTracker
+                self._health_tracker = SourceHealthTracker(self.db)
+            await asyncio.to_thread(self._health_tracker.record_run, src.name, status == "ok", total_fetched, new_jobs, latency_ms, error)
         return {src.name: new_jobs}
 
     # ============ RSS Scraper ============

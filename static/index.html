@@ -37,6 +37,8 @@
       <button id="view-table-btn" class="view-btn" onclick="setViewMode('table')" title="Table View (T)">☷</button>
       <button id="view-kanban-btn" class="view-btn" onclick="setViewMode('kanban')" title="Kanban Pipeline (K)">📋</button>
     </div>
+    <button class="icon-btn action-pill-btn highlight-pill" onclick="toggleSubscriptionsModal()" title="Watchlist Company & Role Subscriptions">🔔 Watchlist <span id="nav-subs-count" class="badge-counter hidden">0</span></button>
+    <button class="icon-btn action-pill-btn" onclick="toggleTrendsModal()" title="Market Intelligence & Correlation Matrix">📈 Trends</button>
     <button class="icon-btn action-pill-btn" onclick="toggleProfileModal()" title="Resume & Skills Keyword Matcher">🎯 Matcher</button>
     <button class="icon-btn action-pill-btn" onclick="toggleInterviewModal()" title="Cybersecurity Interview Technical Cheat Sheet">💡 Prep</button>
     <button id="sound-toggle" class="icon-btn" onclick="toggleSound()" title="Toggle Cyber Audio FX">🔊</button>
@@ -90,6 +92,7 @@
         <button class="pill" data-val="global" onclick="setFilter('location_scope', 'global', this, 'scope-tabs')">🌍 Global (Outside India)</button>
         <button class="pill" data-val="remote" onclick="setFilter('location_scope', 'remote', this, 'scope-tabs')">💻 Remote / WFH</button>
         <button class="pill" data-val="internship" onclick="setFilter('location_scope', 'internship', this, 'scope-tabs')">🎓 Internships Only</button>
+        <button class="pill" data-val="subscriptions" onclick="setFilter('location_scope', 'subscriptions', this, 'scope-tabs')">🎯 Watchlist Matches</button>
         <button class="pill" data-val="fresher" onclick="setFilter('location_scope', 'fresher', this, 'scope-tabs')">💼 Fresher Jobs Only</button>
       </div>
     </div>
@@ -438,6 +441,114 @@
         <button class="pill" id="itab-network" onclick="switchInterviewTab('network')">🌐 Networking & Linux</button>
       </div>
       <div id="interview-content" class="interview-content-area"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== JOBSCOOP WATCHLIST SUBSCRIPTIONS MODAL ===== -->
+<div id="subscriptions-modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)toggleSubscriptionsModal()">
+  <div class="modal-card modal-wide">
+    <div class="modal-header">
+      <div>
+        <h2>🔔 Target Watchlist Subscriptions</h2>
+        <p class="modal-company">JobScoop Alert Engine • Track specific companies and roles with real-time matches</p>
+      </div>
+      <button onclick="toggleSubscriptionsModal()" class="close-btn">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Add subscription form -->
+      <form id="subscription-form" class="subscription-form" onsubmit="handleCreateSubscription(event)">
+        <div class="sub-form-row">
+          <div class="sub-input-group">
+            <label class="filter-label">Target Company</label>
+            <input type="text" id="sub-company-input" class="sub-input" placeholder="e.g. CrowdStrike, Cloudflare, Fortinet (* for any)" />
+          </div>
+          <div class="sub-input-group">
+            <label class="filter-label">Target Role / Keywords</label>
+            <input type="text" id="sub-role-input" class="sub-input" placeholder="e.g. Security Intern, SOC Analyst, Pentester (* for any)" />
+          </div>
+          <div class="sub-input-group sub-checkbox-group">
+            <label class="sub-checkbox-label">
+              <input type="checkbox" id="sub-telegram-check" checked />
+              <span>Telegram Alerts</span>
+            </label>
+            <button type="submit" class="btn-action btn-primary">+ Add Watchlist</button>
+          </div>
+        </div>
+      </form>
+
+      <!-- Active Subscriptions List -->
+      <div class="subscriptions-section">
+        <div class="sub-list-header">
+          <h3>Active Watchlists (<span id="subscriptions-count">0</span>)</h3>
+          <button class="btn-action btn-sm" onclick="loadSubscriptions()">🔄 Refresh</button>
+        </div>
+        <div id="subscriptions-list" class="subscriptions-list">
+          <p class="loading-state">Loading subscriptions...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== JOBSCOOP TRENDS & CORRELATION MATRIX MODAL ===== -->
+<div id="trends-modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)toggleTrendsModal()">
+  <div class="modal-card modal-wide modal-tall">
+    <div class="modal-header">
+      <div>
+        <h2>📈 Market Trends & Correlation Intelligence</h2>
+        <p class="modal-company">JobScoop Analytics • Top hiring companies, in-demand roles, and company-role frequency matrix</p>
+      </div>
+      <button onclick="toggleTrendsModal()" class="close-btn">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Timeframe pills -->
+      <div class="trends-toolbar">
+        <div class="tab-pills" id="trends-time-tabs">
+          <button class="pill" data-days="7" onclick="loadTrends(7, this)">Last 7 Days</button>
+          <button class="pill active" data-days="30" onclick="loadTrends(30, this)">Last 30 Days</button>
+          <button class="pill" data-days="0" onclick="loadTrends(0, this)">All Time</button>
+        </div>
+        <div class="trends-kpi-summary">
+          <span class="badge badge-accent" id="trends-total-tracked">Total: 0 jobs</span>
+        </div>
+      </div>
+
+      <!-- Charts Grid -->
+      <div class="trends-charts-grid">
+        <div class="chart-card">
+          <h3 class="chart-title">Top 10 Hiring Companies</h3>
+          <canvas id="chart-trends-companies" height="220"></canvas>
+        </div>
+        <div class="chart-card">
+          <h3 class="chart-title">In-Demand Cyber Roles</h3>
+          <canvas id="chart-trends-roles" height="220"></canvas>
+        </div>
+      </div>
+
+      <!-- Company-Role Correlation Heatmap Table -->
+      <div class="correlation-section">
+        <div class="correlation-header">
+          <h3>🔥 Company-Role Correlation Frequency Matrix</h3>
+          <span class="correlation-hint">Click any row to instantly filter jobs grid to that combination</span>
+        </div>
+        <div class="correlation-table-wrapper">
+          <table class="correlation-table">
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Role Specialty</th>
+                <th>Frequency</th>
+                <th>Market Share</th>
+                <th>Quick Actions</th>
+              </tr>
+            </thead>
+            <tbody id="correlation-table-body">
+              <tr><td colspan="5" style="text-align:center;">Loading correlation matrix...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </div>

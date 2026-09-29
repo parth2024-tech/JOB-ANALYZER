@@ -178,3 +178,132 @@ class TestDatabaseQueries:
         # Filter by remote
         remote_jobs_result = temp_db.get_jobs_filtered(remote=True)
         assert remote_jobs_result['total'] >= 1
+
+
+class TestSubscriptionsAndTrends:
+    """Test JobScoop subscription and trends intelligence engine."""
+
+    def test_subscriptions_crud(self, temp_db):
+        """Test creating, reading, toggling, and deleting subscriptions."""
+        sub_id1 = temp_db.add_subscription("CrowdStrike", "Intern", notify_telegram=True)
+        assert sub_id1 > 0
+
+        sub_id2 = temp_db.add_subscription("*", "SOC Analyst", notify_telegram=False)
+        assert sub_id2 > 0
+
+        # Read subscriptions
+        subs = temp_db.get_subscriptions()
+        assert len(subs) == 2
+        s1 = next(s for s in subs if s["id"] == sub_id1)
+        assert s1["company"] == "CrowdStrike"
+        assert s1["role"] == "Intern"
+        assert s1["active"] is True
+        assert s1["notify_telegram"] is True
+        assert "match_count" in s1
+
+        # Toggle active
+        temp_db.toggle_subscription(sub_id1)
+        active_subs = temp_db.get_active_subscriptions()
+        assert len(active_subs) == 1
+        assert active_subs[0]["id"] == sub_id2
+
+        temp_db.toggle_subscription(sub_id1)
+        assert len(temp_db.get_active_subscriptions()) == 2
+
+        # Delete subscription
+        temp_db.delete_subscription(sub_id1)
+        subs_after = temp_db.get_subscriptions()
+        assert len(subs_after) == 1
+        assert subs_after[0]["id"] == sub_id2
+
+    def test_match_subscription_logic(self):
+        """Test tokenized matching with stop words and wildcards."""
+        from database import match_subscription
+
+        subs = [
+            {"id": 1, "company": "Cloudflare", "role": "security and intern", "active": True},
+            {"id": 2, "company": "*", "role": "soc analyst", "active": True},
+            {"id": 3, "company": "Fortinet", "role": "engineer", "active": False}
+        ]
+
+        # Case 1: Company + role matching with stop words ignored
+        m1 = match_subscription("Associate Cyber Security Intern", "Cloudflare", subs)
+        assert m1 is not None
+        assert m1["id"] == 1
+
+        # Case 2: Wildcard company with token matching
+        m2 = match_subscription("L1 SOC Analyst", "Wipro", subs)
+        assert m2 is not None
+        assert m2["id"] == 2
+
+        # Case 3: Inactive subscription should not match
+        m3 = match_subscription("Security Engineer", "Fortinet", subs)
+        assert m3 is None
+
+        # Case 4: No match
+        m4 = match_subscription("Frontend React Developer", "Cloudflare", subs)
+        assert m4 is None
+
+    def test_get_jobs_filtered_subscriptions(self, temp_db):
+        """Test filtering jobs grid by active subscriptions."""
+        from datetime import datetime, timedelta, timezone
+
+        import yaml
+
+        from scraper import JobEntry
+
+        with open("/home/thor/Desktop/linkedin/config.yaml") as f:
+            config = yaml.safe_load(f)
+        keywords = config.get("keywords", {}).get("domains", [])
+
+        recent_date = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        temp_db.insert_job(
+            JobEntry(id="sub-1", source="S1", source_url="u", title="Security Intern", company="Cloudflare", location="Remote", remote=True, job_type="internship", domain_tags=["appsec"], description="Internship", apply_url="u", posted_date=recent_date),
+            keywords
+        )
+        temp_db.insert_job(
+            JobEntry(id="sub-2", source="S1", source_url="u", title="Junior Penetration Tester", company="AcmeCorp", location="Bangalore", remote=False, job_type="full-time", domain_tags=["pentest"], description="Entry level", apply_url="u", posted_date=recent_date),
+            keywords
+        )
+
+        # Before subscription: 0 subscriptions matches
+        res_empty = temp_db.get_jobs_filtered(location_scope="subscriptions")
+        assert res_empty["total"] == 0
+
+        # Add subscription for Cloudflare
+        temp_db.add_subscription("Cloudflare", "Intern")
+        res_sub = temp_db.get_jobs_filtered(location_scope="subscriptions")
+        assert res_sub["total"] == 1
+        assert res_sub["items"][0]["company"] == "Cloudflare"
+        assert res_sub["items"][0]["is_subscribed_match"] is True
+
+    def test_get_trends_summary(self, temp_db):
+        """Test market trends and correlation matrix calculation."""
+        from datetime import datetime, timedelta, timezone
+
+        import yaml
+
+        from scraper import JobEntry
+
+        with open("/home/thor/Desktop/linkedin/config.yaml") as f:
+            config = yaml.safe_load(f)
+        keywords = config.get("keywords", {}).get("domains", [])
+
+        recent_date = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        temp_db.insert_job(
+            JobEntry(id="t-1", source="S1", source_url="u", title="Security Intern", company="CrowdStrike", location="Remote", remote=True, job_type="internship", domain_tags=["appsec"], description="internship", apply_url="u1", posted_date=recent_date),
+            keywords
+        )
+        temp_db.insert_job(
+            JobEntry(id="t-2", source="S1", source_url="u", title="Junior SOC Analyst", company="CrowdStrike", location="Bangalore", remote=False, job_type="full-time", domain_tags=["soc"], description="entry-level fresher welcome", apply_url="u2", posted_date=recent_date),
+            keywords
+        )
+
+        trends = temp_db.get_trends_summary(days=30)
+        assert trends["total_jobs"] >= 2
+        assert len(trends["top_companies"]) >= 1
+        assert any(c["company"] == "CrowdStrike" for c in trends["top_companies"])
+        assert len(trends["top_roles"]) >= 1
+        assert isinstance(trends["correlation_matrix"], list)
+        assert isinstance(trends["timeline"], list)
+

@@ -115,8 +115,6 @@ def extract_salary(text: str) -> dict:
         lo_str, hi_str = m.group(1), m.group(2)
         lo = _clean_num(lo_str)
         hi = _clean_num(hi_str)
-        # Detect "k" suffix
-        full_match = m.group(0).lower()
         if lo < 500:  # Likely in thousands
             lo, hi = lo * 1000, hi * 1000
         lo_inr_lpa = (lo * USD_TO_INR) / INR_LPA_DIVISOR
@@ -562,6 +560,71 @@ def generate_application_routes(title: str, company: str, apply_url: str | None)
     }
 
 
+# =========================================================================
+# JOBSCOOP SUBSCRIPTION MATCHING & ROLE BUCKETS
+# =========================================================================
+
+JOBSCOOP_STOP_WORDS = {
+    "and", "or", "the", "for", "in", "at", "of", "to", "a", "an", "&", "with",
+    "is", "on", "by", "as", "from", "into"
+}
+
+ROLE_BUCKETS = {
+    "Security Intern": r'\b(intern|internship|trainee|co[\s-]?op|apprentice|werkstudent\w*)\b',
+    "SOC & SIEM Analyst": r'\b(soc|siem|soar|incident\s*(?:response|responder|handler)|dfir)\b',
+    "Security Engineer": r'\b(security engineer|infosec engineer|cyber\s*security engineer|systems?\s*security)\b',
+    "Penetration Tester / Red Team": r'\b(pentest\w*|red\s*team|ethical\s*hack\w*|vulnerability|offensive\s*security)\b',
+    "Cloud Security": r'\b(cloud\s*security|aws\s*security|azure\s*security|gcp\s*security|cnapp)\b',
+    "AppSec & DevSecOps": r'\b(appsec|application\s*security|devsecops|software\s*security|product\s*security)\b',
+    "GRC & Compliance": r'\b(grc|compliance|risk|audit|iso\s*27001|soc\s*2)\b',
+    "Threat Intel & Research": r'\b(threat\s*(?:intel|hunt|research)|malware|reverse\s*engineer\w*)\b',
+    "IAM / Identity Access": r'\b(iam|identity|access\s*management|pam|okta|sailpoint)\b',
+    "Cyber Defense / Blue Team": r'\b(blue\s*team|detection|edr|xdr|threat\s*detection)\b'
+}
+
+
+def match_subscription(job_title: str, company: str, subscriptions: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """
+    Match a job against active subscriptions using JobScoop's tokenized matching algorithm.
+    Returns the first matching subscription dict, or None if no match.
+    """
+    if not subscriptions:
+        return None
+    jt_lower = (job_title or "").lower().strip()
+    c_lower = (company or "").lower().strip()
+
+    for sub in subscriptions:
+        if not sub.get("active", True):
+            continue
+        sub_c = (sub.get("company") or "").lower().strip()
+        sub_r = (sub.get("role") or "").lower().strip()
+
+        # Company check
+        c_match = False
+        if not sub_c or sub_c in ("*", "all"):
+            c_match = True
+        elif sub_c in c_lower or c_lower in sub_c:
+            c_match = True
+
+        if not c_match:
+            continue
+
+        # Role check
+        r_match = False
+        if not sub_r or sub_r in ("*", "all"):
+            r_match = True
+        elif sub_r in jt_lower:
+            r_match = True
+        else:
+            tokens = [w for w in re.findall(r'\b\w+\b', sub_r) if w not in JOBSCOOP_STOP_WORDS]
+            if tokens and all(t in jt_lower for t in tokens):
+                r_match = True
+
+        if c_match and r_match:
+            return sub
+    return None
+
+
 class JobDatabase:
     def __init__(self, db_path: str = "jobs.db"):
         self.db_path = Path(db_path)
@@ -643,6 +706,19 @@ class JobDatabase:
                     sent_at TEXT NOT NULL
                 )
             """)
+
+            # Subscriptions table (JobScoop engine)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS subscriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    company TEXT NOT NULL,
+                    role TEXT NOT NULL,
+                    active INTEGER DEFAULT 1,
+                    notify_telegram INTEGER DEFAULT 1,
+                    created_at TEXT NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_subscriptions_active ON subscriptions(active)")
 
             # Indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hash ON jobs(hash)")
@@ -928,6 +1004,156 @@ class JobDatabase:
             """, (f'-{days} days',)).fetchall()
             return [{"day": r["day"], "count": r["count"]} for r in rows]
 
+    # =========================================================================
+    # JOBSCOOP SUBSCRIPTION & TRENDS ENGINE
+    # =========================================================================
+
+    def add_subscription(self, company: str, role: str, notify_telegram: bool = True) -> int:
+        """Create a new company + role subscription."""
+        with self._conn() as conn:
+            now = datetime.now(timezone.utc).isoformat()
+            cursor = conn.execute(
+                "INSERT INTO subscriptions (company, role, active, notify_telegram, created_at) VALUES (?, ?, 1, ?, ?)",
+                (company.strip(), role.strip(), 1 if notify_telegram else 0, now)
+            )
+            return cursor.lastrowid
+
+    def get_subscriptions(self) -> list[dict[str, Any]]:
+        """Fetch all subscriptions with live match counts."""
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM subscriptions ORDER BY created_at DESC").fetchall()
+            subs = [dict(r) for r in rows]
+            for s in subs:
+                s["active"] = bool(s.get("active", 1))
+                s["notify_telegram"] = bool(s.get("notify_telegram", 1))
+                c = (s.get("company") or "").strip()
+                r = (s.get("role") or "").strip()
+                params = []
+                where_parts = []
+                if c and c != "*":
+                    where_parts.append("company LIKE ?")
+                    params.append(f"%{c}%")
+                if r and r != "*":
+                    where_parts.append("title LIKE ?")
+                    params.append(f"%{r}%")
+                where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+                cnt = conn.execute(f"SELECT COUNT(*) FROM jobs {where_sql}", tuple(params)).fetchone()[0]
+                s["match_count"] = cnt
+            return subs
+
+    def get_active_subscriptions(self) -> list[dict[str, Any]]:
+        """Fetch only active subscriptions."""
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM subscriptions WHERE active = 1 ORDER BY id ASC").fetchall()
+            return [dict(r) for r in rows]
+
+    def delete_subscription(self, sub_id: int) -> bool:
+        """Delete subscription by ID."""
+        with self._conn() as conn:
+            conn.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
+            return True
+
+    def toggle_subscription(self, sub_id: int) -> bool:
+        """Toggle subscription active status."""
+        with self._conn() as conn:
+            conn.execute("UPDATE subscriptions SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END WHERE id = ?", (sub_id,))
+            return True
+
+    def get_trends_summary(self, days: int = 30) -> dict[str, Any]:
+        """
+        Aggregate market trends, top companies, in-demand roles, and 2D correlation matrix (JobScoop engine).
+        """
+        where_time = f"WHERE discovered_at >= DATE('now', '-{days} days')" if days > 0 else "WHERE 1=1"
+
+        with self._conn() as conn:
+            total = conn.execute(f"SELECT COUNT(*) FROM jobs {where_time}").fetchone()[0]
+            if total == 0:
+                return {
+                    "total_jobs": 0,
+                    "top_companies": [],
+                    "top_roles": [],
+                    "correlation_matrix": [],
+                    "timeline": [],
+                    "days": days,
+                    "active_subscriptions_count": len(self.get_active_subscriptions())
+                }
+
+            # 1. Top Hiring Companies
+            comp_rows = conn.execute(f"""
+                SELECT company, COUNT(*) as c
+                FROM jobs
+                {where_time} AND company IS NOT NULL AND company != '' AND company != 'Unknown'
+                GROUP BY company
+                ORDER BY c DESC
+                LIMIT 10
+            """).fetchall()
+            top_companies = [
+                {
+                    "company": r["company"],
+                    "count": r["c"],
+                    "percentage": round((r["c"] / total) * 100, 1)
+                }
+                for r in comp_rows
+            ]
+
+            # 2. Top Roles & Company-Role Correlation Matrix
+            all_jobs = conn.execute(f"SELECT title, company FROM jobs {where_time}").fetchall()
+            role_counts = {role_name: 0 for role_name in ROLE_BUCKETS}
+            company_role_counts: dict[tuple[str, str], int] = {}
+            top_comp_names = {c["company"].lower() for c in top_companies}
+
+            for row in all_jobs:
+                title = row["title"] or ""
+                company = row["company"] or "Other"
+                matched_roles = []
+                for role_name, pat in ROLE_BUCKETS.items():
+                    if re.search(pat, title, re.IGNORECASE):
+                        role_counts[role_name] += 1
+                        matched_roles.append(role_name)
+
+                # Correlate top companies with matched roles
+                if company.lower() in top_comp_names and matched_roles:
+                    for r_name in matched_roles:
+                        key = (company, r_name)
+                        company_role_counts[key] = company_role_counts.get(key, 0) + 1
+
+            sorted_roles = sorted(
+                [{"role": k, "count": v, "percentage": round((v / total) * 100, 1)}
+                 for k, v in role_counts.items() if v > 0],
+                key=lambda x: -x["count"]
+            )
+
+            # 3. Correlation Matrix (Company x Role)
+            correlation_matrix = [
+                {
+                    "company": comp,
+                    "role": role,
+                    "count": cnt,
+                    "percentage": round((cnt / total) * 100, 1)
+                }
+                for (comp, role), cnt in sorted(company_role_counts.items(), key=lambda x: -x[1])
+            ][:20]
+
+            # 4. Discovery Timeline
+            timeline_rows = conn.execute(f"""
+                SELECT DATE(discovered_at) as day, COUNT(*) as count
+                FROM jobs
+                {where_time}
+                GROUP BY DATE(discovered_at)
+                ORDER BY day ASC
+            """).fetchall()
+            timeline = [{"day": r["day"], "count": r["count"]} for r in timeline_rows]
+
+            return {
+                "total_jobs": total,
+                "top_companies": top_companies,
+                "top_roles": sorted_roles[:10],
+                "correlation_matrix": correlation_matrix,
+                "timeline": timeline,
+                "days": days,
+                "active_subscriptions_count": len(self.get_active_subscriptions())
+            }
+
     def get_jobs_filtered(
         self,
         search: str = "",
@@ -944,8 +1170,8 @@ class JobDatabase:
         page: int = 1,
         page_size: int = 24
     ) -> dict[str, Any]:
-        conditions = []
-        params = []
+        conditions: list[str] = []
+        params: list[Any] = []
 
         if search:
             # Try FTS5 first (fast), fallback to LIKE
@@ -995,6 +1221,28 @@ class JobDatabase:
             conditions.append("(job_type = 'internship' OR seniority_level = 'internship')")
         elif location_scope == "fresher":
             conditions.append("(job_type != 'internship' AND seniority_level != 'internship')")
+        elif location_scope == "subscriptions":
+            active_subs = self.get_active_subscriptions()
+            if not active_subs:
+                conditions.append("1 = 0")
+            else:
+                sub_sqls = []
+                for s in active_subs:
+                    sc = (s.get("company") or "").strip()
+                    sr = (s.get("role") or "").strip()
+                    sub_parts = []
+                    if sc and sc != "*":
+                        sub_parts.append("company LIKE ?")
+                        params.append(f"%{sc}%")
+                    if sr and sr != "*":
+                        sub_parts.append("title LIKE ?")
+                        params.append(f"%{sr}%")
+                    if sub_parts:
+                        sub_sqls.append(f"({' AND '.join(sub_parts)})")
+                    else:
+                        sub_sqls.append("1 = 1")
+                if sub_sqls:
+                    conditions.append(f"({' OR '.join(sub_sqls)})")
 
         where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -1009,6 +1257,7 @@ class JobDatabase:
         offset = max(0, (page - 1) * page_size)
 
         with self._conn() as conn:
+            active_subs = self.get_active_subscriptions()
             total = conn.execute(f"SELECT COUNT(*) FROM jobs {where_clause}", tuple(params)).fetchone()[0]
             query = f"SELECT * FROM jobs {where_clause} {order_clause} LIMIT ? OFFSET ?"
             rows = conn.execute(query, tuple(params) + (page_size, offset)).fetchall()
@@ -1035,8 +1284,11 @@ class JobDatabase:
                 is_ind = is_india_location(loc)
                 is_tgt = is_target_opportunity(loc, rem, jt, tit)
 
+                matched_sub = match_subscription(tit, comp, active_subs)
                 item["is_india"] = is_ind
                 item["is_target_match"] = is_tgt
+                item["is_subscribed_match"] = matched_sub is not None
+                item["matched_subscription"] = matched_sub
                 item["target_badge"] = "🇮🇳 India • Fresher / Intern" if is_ind else "🌐 Global • Fresher / Intern"
                 item["application_routes"] = generate_application_routes(tit, comp, item.get("apply_url"))
                 item["apply_url"] = item["application_routes"]["direct_url"]
@@ -1133,7 +1385,7 @@ class JobDatabase:
             }
 
     def get_domain_counts(self) -> list[dict[str, Any]]:
-        tag_counts = {}
+        tag_counts: dict[str, int] = {}
         with self._conn() as conn:
             rows = conn.execute("SELECT domain_tags FROM jobs WHERE domain_tags IS NOT NULL AND domain_tags != '[]'").fetchall()
             for row in rows:
@@ -1163,8 +1415,8 @@ class JobDatabase:
                 new_cat = classify_company(comp)
                 sal = extract_salary(desc) if not current_disp else {}
 
-                updates = []
-                params = []
+                updates: list[str] = []
+                params: list[Any] = []
 
                 if new_cat != current_cat:
                     updates.append("company_category = ?")
