@@ -120,19 +120,8 @@ class TestScraperEngine:
     async def test_scrape_all_returns_counts(self, temp_db):
         """Test scrape_all returns dict of source counts."""
         async with ScraperEngine("/home/thor/Desktop/linkedin/config.yaml", temp_db) as scraper:
-            # Mock all fetch methods to return empty
-            with patch.object(scraper, 'scrape_rss', new_callable=AsyncMock) as mock_rss,\
-                 patch.object(scraper, 'scrape_github_api_dir', new_callable=AsyncMock) as mock_github,\
-                 patch.object(scraper, 'scrape_json_api', new_callable=AsyncMock) as mock_json,\
-                 patch.object(scraper, 'scrape_ats_board', new_callable=AsyncMock) as mock_ats,\
-                 patch.object(scraper, 'scrape_lever_board', new_callable=AsyncMock) as mock_lever:
-                
-                mock_rss.return_value = (0, 0)
-                mock_github.return_value = (0, 0)
-                mock_json.return_value = (0, 0)
-                mock_ats.return_value = (0, 0)
-                mock_lever.return_value = (0, 0)
-                
+            with patch.object(scraper, '_run_source', new_callable=AsyncMock) as mock_run:
+                mock_run.side_effect = lambda method, src: {src.name: 0}
                 counts = await scraper.scrape_all()
                 assert isinstance(counts, dict)
                 assert all(isinstance(v, int) for v in counts.values())

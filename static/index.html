@@ -3,16 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CyberSec Intel Grid — Fresher & Internship Radar (≤ 14 Days)</title>
+  <title>CyberSec Intel Grid | Cybersecurity Career Intelligence Platform</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2300d488' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'/%3E%3Cpolyline points='9 12 11 14 15 10'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
 
 <!-- ===== REAL-TIME TOAST BANNER ===== -->
 <div id="ws-banner" class="ws-banner hidden">
-  <span id="ws-banner-text">🆕 New jobs discovered!</span>
+  <span id="ws-banner-text">New opportunities detected across public feeds</span>
   <button onclick="refreshJobsFromBanner()" class="btn-banner">Load Now</button>
   <button onclick="dismissBanner()" class="btn-banner-close">✕</button>
 </div>
@@ -20,64 +21,101 @@
 <!-- ===== HEADER ===== -->
 <header class="app-header">
   <div class="header-brand">
-    <div class="logo-icon">🛡️</div>
+    <div class="logo-icon">
+      <svg class="icon-svg-lg" viewBox="0 0 24 24">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        <polyline points="9 12 11 14 15 10"></polyline>
+      </svg>
+    </div>
     <div>
       <h1 class="brand-title">CyberSec Intel Grid</h1>
-      <p class="brand-sub">Fresher & Internship Radar • ≤ 14 Days • India & Global</p>
+      <p class="brand-sub">Real-Time Cybersecurity Engineering Career Intelligence</p>
     </div>
   </div>
   <div class="header-controls">
     <div class="search-wrapper">
-      <span class="search-icon">🔍</span>
-      <input type="text" id="search-input" placeholder="Search roles, companies, skills..." class="search-input" autocomplete="off" />
+      <span class="search-icon">
+        <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      </span>
+      <input type="text" id="search-input" placeholder="Search roles, companies, certifications, skills..." class="search-input" autocomplete="off" />
       <div id="autocomplete-dropdown" class="autocomplete-dropdown hidden"></div>
     </div>
     <div class="view-switcher">
-      <button id="view-grid-btn" class="view-btn active" onclick="setViewMode('grid')" title="Grid View (G)">▦</button>
-      <button id="view-table-btn" class="view-btn" onclick="setViewMode('table')" title="Table View (T)">☷</button>
-      <button id="view-kanban-btn" class="view-btn" onclick="setViewMode('kanban')" title="Kanban Pipeline (K)">📋</button>
+      <button id="view-grid-btn" class="view-btn active" onclick="setViewMode('grid')" title="Grid View (G)">
+        <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+      </button>
+      <button id="view-table-btn" class="view-btn" onclick="setViewMode('table')" title="Table View (T)">
+        <svg class="icon-svg" viewBox="0 0 24 24"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+      </button>
+      <button id="view-kanban-btn" class="view-btn" onclick="setViewMode('kanban')" title="Kanban Pipeline (K)">
+        <svg class="icon-svg" viewBox="0 0 24 24"><rect x="3" y="3" width="5" height="18" rx="1"></rect><rect x="10" y="3" width="5" height="12" rx="1"></rect><rect x="17" y="3" width="5" height="15" rx="1"></rect></svg>
+      </button>
     </div>
-    <button class="icon-btn action-pill-btn highlight-pill" onclick="toggleSubscriptionsModal()" title="Watchlist Company & Role Subscriptions">🔔 Watchlist <span id="nav-subs-count" class="badge-counter hidden">0</span></button>
-    <button class="icon-btn action-pill-btn" onclick="toggleTrendsModal()" title="Market Intelligence & Correlation Matrix">📈 Trends</button>
-    <button class="icon-btn action-pill-btn" onclick="toggleProfileModal()" title="Resume & Skills Keyword Matcher">🎯 Matcher</button>
-    <button class="icon-btn action-pill-btn" onclick="toggleInterviewModal()" title="Cybersecurity Interview Technical Cheat Sheet">💡 Prep</button>
-    <button class="icon-btn action-pill-btn" onclick="exportCSV()" title="Download Filtered Radar as CSV">📥 Export CSV</button>
-    <button id="sound-toggle" class="icon-btn" onclick="toggleSound()" title="Toggle Cyber Audio FX">🔊</button>
-    <button id="theme-toggle" class="icon-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">🌙</button>
-    <button class="icon-btn" onclick="toggleSourcesDrawer()" title="Source Health">📡</button>
-    <button class="icon-btn" onclick="toggleShortcutsModal()" title="Keyboard Shortcuts (?)">⌨️</button>
+    <button class="icon-btn action-pill-btn highlight-pill" onclick="toggleSubscriptionsModal()" title="Watchlist Subscriptions">
+      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+      <span>Watchlist</span>
+      <span id="nav-subs-count" class="badge-counter hidden">0</span>
+    </button>
+    <button class="icon-btn action-pill-btn" onclick="toggleTrendsModal()" title="Market Intelligence">
+      <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline><polyline points="17 6 23 6 23 12"></polyline></svg>
+      <span>Trends</span>
+    </button>
+    <button class="icon-btn action-pill-btn" onclick="toggleProfileModal()" title="Skill & Resume Matcher">
+      <svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+      <span>Matcher</span>
+    </button>
+    <button class="icon-btn action-pill-btn" onclick="toggleInterviewModal()" title="Interview Technical Prep">
+      <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+      <span>Prep</span>
+    </button>
+    <button class="icon-btn action-pill-btn" onclick="exportCSV()" title="Export Filtered Radar to CSV">
+      <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+      <span>Export CSV</span>
+    </button>
+    <button id="sound-toggle" class="icon-btn" onclick="toggleSound()" title="Audio Feedback">
+      <svg id="sound-icon-svg" class="icon-svg" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+    </button>
+    <button id="theme-toggle" class="icon-btn" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+      <svg id="theme-icon-svg" class="icon-svg" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    </button>
+    <button class="icon-btn" onclick="toggleSourcesDrawer()" title="Feed Status">
+      <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+    </button>
+    <button class="icon-btn" onclick="toggleShortcutsModal()" title="Keyboard Shortcuts">
+      <svg class="icon-svg" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="10" y1="16" x2="14" y2="16"></line></svg>
+    </button>
   </div>
 </header>
 
 <!-- ===== KPI BAR ===== -->
 <div class="kpi-bar">
   <div class="kpi-card">
-    <span class="kpi-val" id="kpi-total">—</span>
-    <span class="kpi-label">Active (≤14 Days)</span>
+    <span class="kpi-val" id="kpi-total">0</span>
+    <span class="kpi-label">Active Listings (≤ 14d)</span>
   </div>
   <div class="kpi-card target">
-    <span class="kpi-val" id="kpi-target">—</span>
-    <span class="kpi-label">🎯 Target Matches</span>
+    <span class="kpi-val" id="kpi-target">0</span>
+    <span class="kpi-label">Target Matches</span>
   </div>
   <div class="kpi-card target">
-    <span class="kpi-val" id="kpi-internships">—</span>
-    <span class="kpi-label">🎓 Internships</span>
+    <span class="kpi-val" id="kpi-internships">0</span>
+    <span class="kpi-label">Internships</span>
   </div>
   <div class="kpi-card">
-    <span class="kpi-val" id="kpi-freshers">—</span>
-    <span class="kpi-label">💼 Entry / Fresher Jobs</span>
+    <span class="kpi-val" id="kpi-freshers">0</span>
+    <span class="kpi-label">Entry-Level Roles</span>
   </div>
   <div class="kpi-card india">
-    <span class="kpi-val" id="kpi-india">—</span>
-    <span class="kpi-label">🇮🇳 India Roles</span>
+    <span class="kpi-val" id="kpi-india">0</span>
+    <span class="kpi-label">India Roles</span>
   </div>
   <div class="kpi-card globe">
-    <span class="kpi-val" id="kpi-globe">—</span>
-    <span class="kpi-label">🌐 Global Roles</span>
+    <span class="kpi-val" id="kpi-globe">0</span>
+    <span class="kpi-label">Global Roles</span>
   </div>
   <div class="kpi-card">
-    <span class="kpi-val" id="kpi-applied">—</span>
-    <span class="kpi-label">Applied</span>
+    <span class="kpi-val" id="kpi-applied">0</span>
+    <span class="kpi-label">Applications</span>
   </div>
 </div>
 
@@ -88,13 +126,13 @@
     <div class="filter-group">
       <label class="filter-label">Scope</label>
       <div class="tab-pills" id="scope-tabs">
-        <button class="pill active" data-val="all" onclick="setFilter('location_scope', 'all', this, 'scope-tabs')">🌐 All World</button>
-        <button class="pill" data-val="india" onclick="setFilter('location_scope', 'india', this, 'scope-tabs')">🇮🇳 India (All Cities)</button>
-        <button class="pill" data-val="global" onclick="setFilter('location_scope', 'global', this, 'scope-tabs')">🌍 Global (Outside India)</button>
-        <button class="pill" data-val="remote" onclick="setFilter('location_scope', 'remote', this, 'scope-tabs')">💻 Remote / WFH</button>
-        <button class="pill" data-val="internship" onclick="setFilter('location_scope', 'internship', this, 'scope-tabs')">🎓 Internships Only</button>
-        <button class="pill" data-val="subscriptions" onclick="setFilter('location_scope', 'subscriptions', this, 'scope-tabs')">🎯 Watchlist Matches</button>
-        <button class="pill" data-val="fresher" onclick="setFilter('location_scope', 'fresher', this, 'scope-tabs')">💼 Fresher Jobs Only</button>
+        <button class="pill active" data-val="all" onclick="setFilter('location_scope', 'all', this, 'scope-tabs')">All Regions</button>
+        <button class="pill" data-val="india" onclick="setFilter('location_scope', 'india', this, 'scope-tabs')">India</button>
+        <button class="pill" data-val="global" onclick="setFilter('location_scope', 'global', this, 'scope-tabs')">Global (Ex-India)</button>
+        <button class="pill" data-val="remote" onclick="setFilter('location_scope', 'remote', this, 'scope-tabs')">Remote / WFH</button>
+        <button class="pill" data-val="internship" onclick="setFilter('location_scope', 'internship', this, 'scope-tabs')">Internships</button>
+        <button class="pill" data-val="subscriptions" onclick="setFilter('location_scope', 'subscriptions', this, 'scope-tabs')">Watchlist Matches</button>
+        <button class="pill" data-val="fresher" onclick="setFilter('location_scope', 'fresher', this, 'scope-tabs')">Entry-Level / Fresher</button>
       </div>
     </div>
 
@@ -102,10 +140,10 @@
     <div class="filter-group">
       <label class="filter-label">Freshness</label>
       <div class="tab-pills" id="freshness-tabs">
-        <button class="pill active" data-val="" onclick="setFilter('freshness', '', this, 'freshness-tabs')">All (≤14d)</button>
-        <button class="pill" data-val="1h" onclick="setFilter('freshness', '1h', this, 'freshness-tabs')">⚡ Hot (&lt;1h)</button>
-        <button class="pill" data-val="24h" onclick="setFilter('freshness', '24h', this, 'freshness-tabs')">🔥 Today (&lt;24h)</button>
-        <button class="pill" data-val="week" onclick="setFilter('freshness', 'week', this, 'freshness-tabs')">📅 &lt;7d</button>
+        <button class="pill active" data-val="" onclick="setFilter('freshness', '', this, 'freshness-tabs')">All (≤ 14d)</button>
+        <button class="pill" data-val="1h" onclick="setFilter('freshness', '1h', this, 'freshness-tabs')">Past Hour (&lt; 1h)</button>
+        <button class="pill" data-val="24h" onclick="setFilter('freshness', '24h', this, 'freshness-tabs')">Past 24 Hours</button>
+        <button class="pill" data-val="week" onclick="setFilter('freshness', 'week', this, 'freshness-tabs')">Past 7 Days</button>
       </div>
     </div>
 
@@ -113,10 +151,10 @@
     <div class="filter-group">
       <label class="filter-label">Experience</label>
       <div class="tab-pills" id="exp-tabs">
-        <button class="pill active" data-val="" onclick="setFilter('max_exp', '', this, 'exp-tabs')">All Exp</button>
-        <button class="pill" data-val="0" onclick="setFilter('max_exp', '0', this, 'exp-tabs')">🎓 0 Yoe (Intern/Entry)</button>
-        <button class="pill" data-val="1" onclick="setFilter('max_exp', '1', this, 'exp-tabs')">🎓 ≤ 1 Yr</button>
-        <button class="pill" data-val="2" onclick="setFilter('max_exp', '2', this, 'exp-tabs')">🎓 ≤ 2 Yrs</button>
+        <button class="pill active" data-val="" onclick="setFilter('max_exp', '', this, 'exp-tabs')">All Experience</button>
+        <button class="pill" data-val="0" onclick="setFilter('max_exp', '0', this, 'exp-tabs')">0 YOE (Intern / Entry)</button>
+        <button class="pill" data-val="1" onclick="setFilter('max_exp', '1', this, 'exp-tabs')">≤ 1 Year</button>
+        <button class="pill" data-val="2" onclick="setFilter('max_exp', '2', this, 'exp-tabs')">≤ 2 Years</button>
       </div>
     </div>
 
@@ -136,10 +174,10 @@
       <label class="filter-label">Level</label>
       <div class="tab-pills" id="seniority-tabs">
         <button class="pill active" data-val="" onclick="setFilter('seniority', '', this, 'seniority-tabs')">All Levels</button>
-        <button class="pill" data-val="internship" onclick="setFilter('seniority', 'internship', this, 'seniority-tabs')">🎓 Internship</button>
-        <button class="pill" data-val="fresher" onclick="setFilter('seniority', 'fresher', this, 'seniority-tabs')">🟢 Entry-Level</button>
-        <button class="pill" data-val="junior" onclick="setFilter('seniority', 'junior', this, 'seniority-tabs')">🔵 Junior</button>
-        <button class="pill" data-val="associate" onclick="setFilter('seniority', 'associate', this, 'seniority-tabs')">🟡 Associate</button>
+        <button class="pill" data-val="internship" onclick="setFilter('seniority', 'internship', this, 'seniority-tabs')">Internship</button>
+        <button class="pill" data-val="fresher" onclick="setFilter('seniority', 'fresher', this, 'seniority-tabs')">Entry-Level</button>
+        <button class="pill" data-val="junior" onclick="setFilter('seniority', 'junior', this, 'seniority-tabs')">Junior</button>
+        <button class="pill" data-val="associate" onclick="setFilter('seniority', 'associate', this, 'seniority-tabs')">Associate</button>
       </div>
     </div>
 
@@ -148,11 +186,11 @@
       <label class="filter-label">Category</label>
       <div class="tab-pills" id="category-tabs">
         <button class="pill active" data-val="" onclick="setFilter('company_category', '', this, 'category-tabs')">All</button>
-        <button class="pill" data-val="vendor" onclick="setFilter('company_category', 'vendor', this, 'category-tabs')">🏭 Vendor</button>
-        <button class="pill" data-val="mssp" onclick="setFilter('company_category', 'mssp', this, 'category-tabs')">🛡️ MSSP</button>
-        <button class="pill" data-val="consulting" onclick="setFilter('company_category', 'consulting', this, 'category-tabs')">🏢 Consulting</button>
-        <button class="pill" data-val="indian_it" onclick="setFilter('company_category', 'indian_it', this, 'category-tabs')">🇮🇳 Indian IT</button>
-        <button class="pill" data-val="government" onclick="setFilter('company_category', 'government', this, 'category-tabs')">🏛️ Govt</button>
+        <button class="pill" data-val="vendor" onclick="setFilter('company_category', 'vendor', this, 'category-tabs')">Product / Vendor</button>
+        <button class="pill" data-val="mssp" onclick="setFilter('company_category', 'mssp', this, 'category-tabs')">MSSP / SOC</button>
+        <button class="pill" data-val="consulting" onclick="setFilter('company_category', 'consulting', this, 'category-tabs')">Consulting / Big 4</button>
+        <button class="pill" data-val="indian_it" onclick="setFilter('company_category', 'indian_it', this, 'category-tabs')">IT Services</button>
+        <button class="pill" data-val="government" onclick="setFilter('company_category', 'government', this, 'category-tabs')">Government</button>
       </div>
     </div>
   </div>
@@ -192,7 +230,7 @@
       <label class="filter-label">Sort</label>
       <select id="sort-select" class="filter-select" onchange="applyFilters()">
         <option value="newest">Newest First</option>
-        <option value="salary_high">💰 Highest Salary</option>
+        <option value="salary_high">Highest Salary</option>
         <option value="oldest">Oldest First</option>
         <option value="title">Title A-Z</option>
         <option value="company">Company A-Z</option>
@@ -207,11 +245,26 @@
 
     <!-- Actions -->
     <div class="filter-group filter-actions">
-      <button class="btn-action btn-primary" onclick="triggerScrape()">⚡ Scrape Now</button>
-      <button class="btn-action" onclick="exportCSV()">⬇️ Export CSV</button>
-      <button class="btn-action" onclick="copyNotionTable()">📋 Notion Table</button>
-      <button class="btn-action" onclick="showAppliedJobs()">📂 Pipeline</button>
-      <button class="btn-action" onclick="clearFilters()">✕ Clear</button>
+      <button class="btn-action btn-primary" onclick="triggerScrape()">
+        <svg class="icon-svg" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        <span>Scrape Feeds</span>
+      </button>
+      <button class="btn-action" onclick="exportCSV()">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        <span>Export CSV</span>
+      </button>
+      <button class="btn-action" onclick="copyNotionTable()">
+        <svg class="icon-svg" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        <span>Copy Table</span>
+      </button>
+      <button class="btn-action" onclick="showAppliedJobs()">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        <span>Pipeline</span>
+      </button>
+      <button class="btn-action" onclick="clearFilters()">
+        <svg class="icon-svg" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <span>Reset</span>
+      </button>
     </div>
   </div>
 </div>
@@ -246,9 +299,9 @@
   <div class="results-header">
     <span id="results-count" class="results-count">Loading...</span>
     <div class="pagination-controls">
-      <button class="page-btn" id="prev-btn" onclick="changePage(-1)" disabled>◀ Prev</button>
+      <button class="page-btn" id="prev-btn" onclick="changePage(-1)" disabled>Prev</button>
       <span id="page-info" class="page-info">Page 1</span>
-      <button class="page-btn" id="next-btn" onclick="changePage(1)">Next ▶</button>
+      <button class="page-btn" id="next-btn" onclick="changePage(1)">Next</button>
     </div>
   </div>
 
@@ -279,35 +332,35 @@
     <div class="kanban-board" id="kanban-board">
       <div class="kanban-column" data-status="saved">
         <div class="kanban-col-header">
-          <span class="kanban-col-title">📌 Wishlist / Saved</span>
+          <span class="kanban-col-title">Saved</span>
           <span class="kanban-badge" id="kb-count-saved">0</span>
         </div>
         <div class="kanban-col-body" id="kb-col-saved" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'saved')"></div>
       </div>
       <div class="kanban-column" data-status="applied">
         <div class="kanban-col-header">
-          <span class="kanban-col-title">📨 Applied</span>
+          <span class="kanban-col-title">Applied</span>
           <span class="kanban-badge" id="kb-count-applied">0</span>
         </div>
         <div class="kanban-col-body" id="kb-col-applied" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'applied')"></div>
       </div>
       <div class="kanban-column" data-status="interviewing">
         <div class="kanban-col-header">
-          <span class="kanban-col-title">💬 Interviewing</span>
+          <span class="kanban-col-title">Interviewing</span>
           <span class="kanban-badge" id="kb-count-interviewing">0</span>
         </div>
         <div class="kanban-col-body" id="kb-col-interviewing" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'interviewing')"></div>
       </div>
       <div class="kanban-column" data-status="offer">
         <div class="kanban-col-header">
-          <span class="kanban-col-title">🎉 Offer</span>
+          <span class="kanban-col-title">Offer</span>
           <span class="kanban-badge" id="kb-count-offer">0</span>
         </div>
         <div class="kanban-col-body" id="kb-col-offer" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'offer')"></div>
       </div>
       <div class="kanban-column" data-status="rejected">
         <div class="kanban-col-header">
-          <span class="kanban-col-title">❌ Rejected</span>
+          <span class="kanban-col-title">Archived</span>
           <span class="kanban-badge" id="kb-count-rejected">0</span>
         </div>
         <div class="kanban-col-body" id="kb-col-rejected" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, 'rejected')"></div>
@@ -317,9 +370,9 @@
 
   <!-- Bottom Pagination -->
   <div class="pagination-bottom">
-    <button class="page-btn" id="prev-btn-b" onclick="changePage(-1)" disabled>◀ Prev</button>
+    <button class="page-btn" id="prev-btn-b" onclick="changePage(-1)" disabled>Prev</button>
     <span id="page-info-b" class="page-info">Page 1</span>
-    <button class="page-btn" id="next-btn-b" onclick="changePage(1)">Next ▶</button>
+    <button class="page-btn" id="next-btn-b" onclick="changePage(1)">Next</button>
   </div>
 </main>
 
@@ -327,7 +380,7 @@
 <div id="applied-overlay" class="drawer-backdrop hidden" onclick="hideAppliedJobs()"></div>
 <div id="applied-panel" class="side-panel hidden">
   <div class="panel-header">
-    <h3>📋 Applied Jobs</h3>
+    <h3>Applied Jobs</h3>
     <button onclick="hideAppliedJobs()" class="close-btn">✕</button>
   </div>
   <div id="applied-list" class="panel-body">Loading...</div>
@@ -337,12 +390,12 @@
 <div id="sources-overlay" class="drawer-backdrop hidden" onclick="toggleSourcesDrawer()"></div>
 <div id="sources-drawer" class="side-panel hidden">
   <div class="panel-header">
-    <h3>📡 Source Health</h3>
+    <h3>Source Health</h3>
     <button onclick="toggleSourcesDrawer()" class="close-btn">✕</button>
   </div>
   <div id="sources-content" class="panel-body">Loading...</div>
   <div class="panel-section">
-    <h4>🕐 Scrape History</h4>
+    <h4>Scrape History</h4>
     <div id="scrape-history-list" class="scrape-history">Loading...</div>
   </div>
 </div>
@@ -351,7 +404,7 @@
 <div id="shortcuts-modal" class="modal-overlay hidden" onclick="if(event.target===this)toggleShortcutsModal()">
   <div class="modal-card">
     <div class="modal-header">
-      <h3>⌨️ Keyboard Shortcuts</h3>
+      <h3>Keyboard Shortcuts</h3>
       <button onclick="toggleShortcutsModal()" class="close-btn">✕</button>
     </div>
     <div class="shortcuts-grid">
@@ -386,23 +439,23 @@
   <div class="modal-card modal-wide">
     <div class="modal-header">
       <div>
-        <h2 id="pitch-modal-title">⚡ Instant Outreach & Cover Letter</h2>
+        <h2 id="pitch-modal-title">Outreach & Cover Letter Generator</h2>
         <p id="pitch-modal-sub" class="modal-company">Personalized pitch for your application</p>
       </div>
       <button onclick="closePitchModal()" class="close-btn">✕</button>
     </div>
     <div class="modal-body">
       <div class="tab-pills" id="pitch-tabs">
-        <button class="pill active" id="ptab-linkedin" onclick="switchPitchTab('linkedin')">💼 LinkedIn Note (≤300 chars)</button>
-        <button class="pill" id="ptab-email" onclick="switchPitchTab('email')">✉️ Cold Email</button>
-        <button class="pill" id="ptab-cover" onclick="switchPitchTab('cover')">📄 Formal Cover Letter</button>
+        <button class="pill active" id="ptab-linkedin" onclick="switchPitchTab('linkedin')">LinkedIn Note (≤300 chars)</button>
+        <button class="pill" id="ptab-email" onclick="switchPitchTab('email')">Cold Email</button>
+        <button class="pill" id="ptab-cover" onclick="switchPitchTab('cover')">Formal Cover Letter</button>
       </div>
       <div class="pitch-content-wrapper">
         <textarea id="pitch-output" class="pitch-textarea" rows="12" readonly></textarea>
         <div class="pitch-actions">
-          <button class="btn-action btn-primary" onclick="copyPitchText()">📋 Copy to Clipboard</button>
-          <button class="btn-action" id="pitch-recruiter-btn" onclick="openRecruiterSearchFromPitch()">👥 Find Recruiters on LinkedIn</button>
-          <button class="btn-action" id="pitch-gcal-btn" onclick="addFollowUpCalendar()">📅 Follow-Up to G-Calendar</button>
+          <button class="btn-action btn-primary" onclick="copyPitchText()">Copy to Clipboard</button>
+          <button class="btn-action" id="pitch-recruiter-btn" onclick="openRecruiterSearchFromPitch()">Find Recruiters on LinkedIn</button>
+          <button class="btn-action" id="pitch-gcal-btn" onclick="addFollowUpCalendar()">Follow-Up to G-Calendar</button>
         </div>
       </div>
     </div>
@@ -414,7 +467,7 @@
   <div class="modal-card">
     <div class="modal-header">
       <div>
-        <h2>🎯 Resume & Skills Keyword Matcher</h2>
+        <h2>Resume & Skills Keyword Matcher</h2>
         <p class="modal-company">Add your skills to see match scores on every job</p>
       </div>
       <button onclick="toggleProfileModal()" class="close-btn">✕</button>
@@ -424,7 +477,9 @@
            ondragover="event.preventDefault(); this.classList.add('dragover');"
            ondragleave="this.classList.remove('dragover');"
            ondrop="handleResumeDrop(event)">
-        <span class="drop-icon">📄</span>
+        <span class="drop-icon">
+          <svg class="icon-svg-lg" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        </span>
         <span class="drop-text">Drag & drop your Resume (.txt / .md / .json) or click to browse</span>
         <input type="file" id="resume-file-input" accept=".txt,.md,.json,.pdf" style="display:none" onchange="handleResumeFileSelect(event)" />
       </div>
@@ -438,8 +493,8 @@
       </div>
       
       <div class="profile-actions">
-        <button class="btn-action btn-primary" onclick="saveUserSkills()">💾 Save & Calculate Match Scores</button>
-        <button class="btn-action" onclick="resetUserSkills()">🔄 Reset Defaults</button>
+        <button class="btn-action btn-primary" onclick="saveUserSkills()">Save & Calculate Match Scores</button>
+        <button class="btn-action" onclick="resetUserSkills()">Reset Defaults</button>
       </div>
     </div>
   </div>
@@ -450,18 +505,18 @@
   <div class="modal-card modal-wide modal-tall">
     <div class="modal-header">
       <div>
-        <h2>💡 Cybersecurity Technical Interview Cheat Sheet</h2>
+        <h2>Cybersecurity Technical Interview Reference</h2>
         <p class="modal-company">High-yield technical questions and model answers for freshers & interns</p>
       </div>
       <button onclick="toggleInterviewModal()" class="close-btn">✕</button>
     </div>
     <div class="modal-body">
       <div class="tab-pills" id="interview-tabs">
-        <button class="pill active" id="itab-soc" onclick="switchInterviewTab('soc')">🛡️ SOC & Blue Team</button>
-        <button class="pill" id="itab-pentest" onclick="switchInterviewTab('pentest')">⚔️ Pen Testing / Red Team</button>
-        <button class="pill" id="itab-cloud" onclick="switchInterviewTab('cloud')">☁️ Cloud Security</button>
-        <button class="pill" id="itab-grc" onclick="switchInterviewTab('grc')">📋 GRC & Compliance</button>
-        <button class="pill" id="itab-network" onclick="switchInterviewTab('network')">🌐 Networking & Linux</button>
+        <button class="pill active" id="itab-soc" onclick="switchInterviewTab('soc')">SOC & Blue Team</button>
+        <button class="pill" id="itab-pentest" onclick="switchInterviewTab('pentest')">Pen Testing & Red Team</button>
+        <button class="pill" id="itab-cloud" onclick="switchInterviewTab('cloud')">Cloud Security</button>
+        <button class="pill" id="itab-grc" onclick="switchInterviewTab('grc')">GRC & Compliance</button>
+        <button class="pill" id="itab-network" onclick="switchInterviewTab('network')">Networking & Systems</button>
       </div>
       <div id="interview-content" class="interview-content-area"></div>
     </div>
@@ -473,7 +528,7 @@
   <div class="modal-card modal-wide">
     <div class="modal-header">
       <div>
-        <h2>🔔 Target Watchlist Subscriptions</h2>
+        <h2>Target Watchlist Subscriptions</h2>
         <p class="modal-company">JobScoop Alert Engine • Track specific companies and roles with real-time matches</p>
       </div>
       <button onclick="toggleSubscriptionsModal()" class="close-btn">✕</button>
@@ -504,7 +559,7 @@
       <div class="subscriptions-section">
         <div class="sub-list-header">
           <h3>Active Watchlists (<span id="subscriptions-count">0</span>)</h3>
-          <button class="btn-action btn-sm" onclick="loadSubscriptions()">🔄 Refresh</button>
+          <button class="btn-action btn-sm" onclick="loadSubscriptions()">Refresh</button>
         </div>
         <div id="subscriptions-list" class="subscriptions-list">
           <p class="loading-state">Loading subscriptions...</p>
@@ -519,7 +574,7 @@
   <div class="modal-card modal-wide modal-tall">
     <div class="modal-header">
       <div>
-        <h2>📈 Market Trends & Correlation Intelligence</h2>
+        <h2>Market Trends & Correlation Intelligence</h2>
         <p class="modal-company">JobScoop Analytics • Top hiring companies, in-demand roles, and company-role frequency matrix</p>
       </div>
       <button onclick="toggleTrendsModal()" class="close-btn">✕</button>
@@ -540,7 +595,7 @@
       <!-- Charts Grid -->
       <div class="trends-charts-grid">
         <div class="chart-card">
-          <h3 class="chart-title">Top 10 Hiring Companies</h3>
+          <h3 class="chart-title">Top Hiring Companies</h3>
           <canvas id="chart-trends-companies" height="220"></canvas>
         </div>
         <div class="chart-card">
@@ -552,8 +607,8 @@
       <!-- Company-Role Correlation Heatmap Table -->
       <div class="correlation-section">
         <div class="correlation-header">
-          <h3>🔥 Company-Role Correlation Frequency Matrix</h3>
-          <span class="correlation-hint">Click any row to instantly filter jobs grid to that combination</span>
+          <h3>Company-Role Correlation Frequency Matrix</h3>
+          <span class="correlation-hint">Click any row to filter jobs grid to that combination</span>
         </div>
         <div class="correlation-table-wrapper">
           <table class="correlation-table">
@@ -575,6 +630,92 @@
     </div>
   </div>
 </div>
+
+<!-- ===== PRIVACY POLICY MODAL ===== -->
+<div id="privacy-modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)togglePrivacyModal()">
+  <div class="modal-card modal-wide">
+    <div class="modal-header">
+      <div>
+        <h2>Privacy Policy</h2>
+        <p class="modal-company">Zero tracking • Local-first privacy architecture</p>
+      </div>
+      <button onclick="togglePrivacyModal()" class="close-btn">✕</button>
+    </div>
+    <div class="modal-body legal-modal-content">
+      <div>
+        <div class="legal-section-title">1. Zero User Data Harvesting</div>
+        <p>CyberSec Intel Grid is an open engineering platform. We do not require user accounts, passwords, or personal profiles. We do not operate tracking beacons, third-party analytics scripts, marketing cookies, or tracking pixels.</p>
+      </div>
+      <div>
+        <div class="legal-section-title">2. Client-Side Resume &amp; Preferences Storage</div>
+        <p>When you provide skills or parse a resume in the Matcher tool, all analysis occurs entirely in your browser memory and is persisted only in your local browser <code>localStorage</code>. Your resume text, skills, application state, and watchlists are never transmitted to or stored on our servers.</p>
+      </div>
+      <div>
+        <div class="legal-section-title">3. Public Job Telemetry</div>
+        <p>All job postings and corporate metadata aggregated by this platform are retrieved from publicly accessible corporate career portals (Greenhouse, Lever, Workday, Ashby) and public developer APIs. We index publicly available metadata to assist early-career cybersecurity professionals in discovering legitimate career opportunities.</p>
+      </div>
+      <div>
+        <div class="legal-section-title">4. Open Source &amp; Transparency</div>
+        <p>The entire pipeline codebase is publicly auditable. No telemetry is monetized or shared with third parties.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TERMS OF SERVICE MODAL ===== -->
+<div id="terms-modal-overlay" class="modal-overlay hidden" onclick="if(event.target===this)toggleTermsModal()">
+  <div class="modal-card modal-wide">
+    <div class="modal-header">
+      <div>
+        <h2>Terms of Service</h2>
+        <p class="modal-company">Fair use career research platform</p>
+      </div>
+      <button onclick="toggleTermsModal()" class="close-btn">✕</button>
+    </div>
+    <div class="modal-body legal-modal-content">
+      <div>
+        <div class="legal-section-title">1. Purpose of Service</div>
+        <p>CyberSec Intel Grid is provided free of charge for informational, educational, and job search purposes. It aggregates publicly available job postings from official corporate career websites.</p>
+      </div>
+      <div>
+        <div class="legal-section-title">2. Verification and Direct Applications</div>
+        <p>While our automated verification bots continuously validate URL status codes and expiration indicators, job openings can close or change without warning. Users are responsible for verifying job details directly on the hiring employer's official career portal before applying.</p>
+      </div>
+      <div>
+        <div class="legal-section-title">3. Intellectual Property</div>
+        <p>All trademarks, company names, logos, and job descriptions referenced on this platform remain the intellectual property of their respective corporate owners. Inclusion does not imply endorsement or affiliation.</p>
+      </div>
+      <div>
+        <div class="legal-section-title">4. Disclaimer of Warranty</div>
+        <p>The platform is provided "as is" without warranty of any kind, express or implied. We do not guarantee employment, response from recruiters, or 100% continuous uptime.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== FOOTER ===== -->
+<footer class="app-footer">
+  <div class="footer-inner">
+    <div class="footer-left">
+      <div class="footer-brand">
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>CyberSec Intel Grid</span>
+      </div>
+      <p class="footer-desc">
+        Automated high-velocity telemetry grid indexing entry-level &amp; internship opportunities across cybersecurity, blue team, red team, and cloud governance. Free &amp; open-source telemetry engine.
+      </p>
+    </div>
+    <div class="footer-right">
+      <span class="status-indicator">
+        <span class="status-indicator-dot"></span>
+        <span>Telemetry Grid Active</span>
+      </span>
+      <button class="footer-link" onclick="togglePrivacyModal()" style="background:none;border:none;padding:0;">Privacy Policy</button>
+      <button class="footer-link" onclick="toggleTermsModal()" style="background:none;border:none;padding:0;">Terms of Service</button>
+      <a class="footer-link" href="https://github.com/parth2024-tech/JOB-ANALYZER" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</footer>
 
 <!-- ===== TOAST ===== -->
 <div id="toast" class="toast hidden"></div>

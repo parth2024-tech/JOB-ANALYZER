@@ -42,7 +42,13 @@ document.addEventListener("DOMContentLoaded", () => {
 // ===== THEME =====
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
-  document.getElementById("theme-toggle").textContent = theme === "dark" ? "🌙" : "☀️";
+  const btn = document.getElementById("theme-toggle");
+  if (btn) {
+    btn.innerHTML = theme === "dark"
+      ? '<svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>'
+      : '<svg class="icon-svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>';
+    btn.setAttribute("title", theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode");
+  }
   localStorage.setItem("theme", theme);
 }
 function toggleTheme() {
@@ -68,7 +74,7 @@ function connectWebSocket() {
         loadStats();
       }
       if (msg.event === "scrape_started") {
-        showToast("⚡ Scrape cycle started...", 3000);
+        showToast("Scrape cycle started in background...", 3000);
       }
     } catch(e) {}
   };
@@ -82,7 +88,7 @@ function connectWebSocket() {
 function showNewJobsBanner(count) {
   state.pendingNewJobs = count;
   const banner = document.getElementById("ws-banner");
-  document.getElementById("ws-banner-text").textContent = `🆕 ${count} new cybersecurity job${count !== 1 ? "s" : ""} discovered!`;
+  document.getElementById("ws-banner-text").textContent = `${count} new cybersecurity job${count !== 1 ? "s" : ""} discovered`;
   banner.classList.remove("hidden");
 }
 function dismissBanner() {
@@ -164,9 +170,18 @@ function setupKeyboard() {
       case "/": e.preventDefault(); document.getElementById("search-input").focus(); break;
       case "Escape":
         closeJobModal();
+        closePitchModal();
         toggleShortcutsModal(true);
+        toggleProfileModal(true);
+        toggleInterviewModal(true);
+        toggleSubscriptionsModal(true);
+        toggleTrendsModal(true);
+        togglePrivacyModal(true);
+        toggleTermsModal(true);
         document.getElementById("applied-panel").classList.add("hidden");
         document.getElementById("applied-overlay").classList.add("hidden");
+        document.getElementById("sources-drawer").classList.add("hidden");
+        document.getElementById("sources-overlay").classList.add("hidden");
         break;
       case "g": case "G": setViewMode("grid"); break;
       case "t": case "T": setViewMode("table"); break;
@@ -313,7 +328,7 @@ function updatePagination() {
 async function loadJobs() {
   const grid = document.getElementById("job-grid");
   const tbody = document.getElementById("job-table-body");
-  grid.innerHTML = `<div class="loading-text" style="grid-column:1/-1">⟳ Loading cybersecurity opportunities...</div>`;
+  grid.innerHTML = `<div class="loading-text" style="grid-column:1/-1">Loading cybersecurity opportunities...</div>`;
   tbody.innerHTML = "";
 
   const params = new URLSearchParams();
@@ -349,7 +364,13 @@ async function loadJobs() {
       `Showing ${data.items.length} of ${data.total.toLocaleString()} results`;
 
     if (!data.items.length) {
-      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">🔍</div><h3>No jobs found</h3><p>Try adjusting your filters</p></div>`;
+      grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-icon">
+          <svg class="icon-svg-lg" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </div>
+        <h3>No opportunities found</h3>
+        <p>Try adjusting your search query, location scope, or filters.</p>
+      </div>`;
     } else {
       renderJobCards(data.items);
       renderJobTable(data.items);
@@ -360,11 +381,15 @@ async function loadJobs() {
     updatePagination();
     state.lastTimestamp = new Date().toISOString();
   } catch(e) {
-    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">⚠️</div><h3>Failed to load jobs</h3><p>${e.message}</p></div>`;
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">
+        <svg class="icon-svg-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+      </div>
+      <h3>Failed to load opportunities</h3>
+      <p>${escapeHtml(e.message)}</p>
+    </div>`;
   }
 }
-
-
 
 function getAgeDays(dateStr) {
   if (!dateStr) return 0;
@@ -380,14 +405,14 @@ function getAgeDays(dateStr) {
 
 function getCategoryInfo(cat) {
   const map = {
-    vendor: { icon: "🏭", label: "Vendor", cls: "badge-cat-vendor" },
-    mssp: { icon: "🛡️", label: "MSSP", cls: "badge-cat-mssp" },
-    consulting: { icon: "🏢", label: "Consulting", cls: "badge-cat-consulting" },
-    indian_it: { icon: "🇮🇳", label: "Indian IT", cls: "badge-cat-indian-it" },
-    government: { icon: "🏛️", label: "Govt", cls: "badge-cat-govt" },
-    other: { icon: "💼", label: "Enterprise", cls: "badge-cat-other" },
+    vendor: { label: "Vendor", cls: "badge-cat-vendor" },
+    mssp: { label: "MSSP", cls: "badge-cat-mssp" },
+    consulting: { label: "Consulting", cls: "badge-cat-consulting" },
+    indian_it: { label: "Indian IT", cls: "badge-cat-indian-it" },
+    government: { label: "Govt", cls: "badge-cat-govt" },
+    other: { label: "Enterprise", cls: "badge-cat-other" },
   };
-  return map[cat] || { icon: "💼", label: cat || "Enterprise", cls: "badge-cat-other" };
+  return map[cat] || { label: cat || "Enterprise", cls: "badge-cat-other" };
 }
 
 // ===== RENDER GRID =====
@@ -398,24 +423,24 @@ function renderJobCards(jobs) {
     const directUrl = routes.direct_url || j.apply_url || "#";
     const seniority = j.seniority_level || "junior";
     const catInfo = getCategoryInfo(j.company_category);
-    const seniorityLabel = { internship: "🎓 Internship", fresher: "🟢 Entry-Level", junior: "🔵 Junior", associate: "🟡 Associate", mid: "🔵 Junior" }[seniority] || seniority;
+    const seniorityLabel = { internship: "Internship", fresher: "Entry-Level", junior: "Junior", associate: "Associate", mid: "Junior" }[seniority] || seniority;
     const ageDays = getAgeDays(j.discovered_at || j.posted_date);
-    const freshnessBadge = ageDays <= 0 ? "⏱️ Today" : ageDays === 1 ? "⏱️ Yesterday" : `⏱️ ${ageDays}d ago`;
+    const freshnessBadge = ageDays <= 0 ? "Today" : ageDays === 1 ? "Yesterday" : `${ageDays}d ago`;
     const skills = (j.skills_required || []).slice(0, 4);
     const tags = (j.domain_tags || []).slice(0, 4);
     const isApplied = j.applied || state.appliedIds.has(j.id);
     const domain = extractDomain(directUrl);
     const logoSrc = j.logo_url || (domain ? `https://logo.clearbit.com/${domain}` : null);
-    const companyMonogram = escapeHtml(j.company ? j.company.substring(0, 2).toUpperCase() : "🏢");
+    const companyMonogram = escapeHtml(j.company ? j.company.substring(0, 2).toUpperCase() : "CS");
 
     // Freshness tag
     let freshnessTag = "";
     if (j.freshness_bucket === "1h") {
-      freshnessTag = '<span class="badge badge-fresh-1h" title="Discovered/Posted within 1 hour!">⚡ &lt; 1h Hot</span>';
+      freshnessTag = '<span class="badge badge-fresh-1h" title="Discovered within 1 hour">&lt; 1h</span>';
     } else if (j.freshness_bucket === "24h") {
-      freshnessTag = '<span class="badge badge-fresh-24h" title="Discovered/Posted within 24 hours">🔥 Today (&lt;24h)</span>';
+      freshnessTag = '<span class="badge badge-fresh-24h" title="Discovered within 24 hours">Today</span>';
     } else if (j.freshness_bucket === "week") {
-      freshnessTag = '<span class="badge badge-fresh-week" title="Discovered within 7 days">📅 &lt; 7d</span>';
+      freshnessTag = '<span class="badge badge-fresh-week" title="Discovered within 7 days">&lt; 7d</span>';
     } else {
       freshnessTag = `<span class="badge badge-freshness">${freshnessBadge}</span>`;
     }
@@ -424,9 +449,9 @@ function renderJobCards(jobs) {
     let expBadge = "";
     if (j.min_exp_years !== null && j.min_exp_years !== undefined) {
       if (j.min_exp_years === 0) {
-        expBadge = '<span class="badge badge-exp badge-exp-zero" title="0 Years Required - Perfect for Freshers & Interns">🎓 0 Yrs Exp</span>';
+        expBadge = '<span class="badge badge-exp badge-exp-zero" title="0 Years Required - Fresher Friendly">0 YOE</span>';
       } else {
-        expBadge = `<span class="badge badge-exp" title="Minimum ${j.min_exp_years} Year(s) Experience">🎓 ≤ ${j.min_exp_years} Yoe</span>`;
+        expBadge = `<span class="badge badge-exp" title="Minimum ${j.min_exp_years} Year(s) Experience">≤ ${j.min_exp_years}y</span>`;
       }
     }
 
@@ -446,38 +471,53 @@ function renderJobCards(jobs) {
       </div>
 
       <div class="card-meta">
-        ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match" title="Direct match with your active watchlist subscription">🎯 Watchlist Match</span>' : ''}
+        ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match" title="Direct match with your active watchlist subscription">Watchlist Match</span>' : ''}
         ${freshnessTag}
         ${expBadge}
-        <span class="badge badge-type">${j.job_type === 'internship' ? '🎓 Internship' : '💼 Fresher Job'}</span>
-        <span class="badge ${scoreBadge}" title="Resume match based on your skills profile">🎯 ${match.score}% Match</span>
+        <span class="badge badge-type">${j.job_type === 'internship' ? 'Internship' : 'Job'}</span>
+        <span class="badge ${scoreBadge}" title="Resume match based on your skills profile">${match.score}% Match</span>
         <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>
-        <span class="badge badge-verified" title="Link verified active (200 OK)">✅ Verified Link</span>
-        <span class="badge ${catInfo.cls}">${catInfo.icon} ${catInfo.label}</span>
-        ${j.salary_display ? `<span class="badge badge-salary">💰 ${escapeHtml(j.salary_display)}</span>` : ''}
-        ${j.remote ? '<span class="badge badge-remote">🌍 Remote</span>' : ''}
+        <span class="badge badge-verified" title="Link verified active (200 OK)">Verified</span>
+        <span class="badge ${catInfo.cls}">${catInfo.label}</span>
+        ${j.salary_display ? `<span class="badge badge-salary">${escapeHtml(j.salary_display)}</span>` : ''}
+        ${j.remote ? '<span class="badge badge-remote">Remote</span>' : ''}
         ${j.target_badge ? `<span class="badge badge-target">${j.target_badge}</span>` : ''}
-        ${isApplied ? '<span class="badge badge-applied">✅ Applied</span>' : ''}
+        ${isApplied ? '<span class="badge badge-applied">Applied</span>' : ''}
       </div>
 
       <div class="card-location">
-        📍 ${escapeHtml(j.location || 'Remote')}
-        ${j.salary_display ? ` &nbsp;•&nbsp; <span class="salary-text">💰 ${escapeHtml(j.salary_display)}</span>` : ''}
+        <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+        <span>${escapeHtml(j.location || 'Remote')}</span>
+        ${j.salary_display ? ` &nbsp;•&nbsp; <span class="salary-text">${escapeHtml(j.salary_display)}</span>` : ''}
       </div>
 
       ${tags.length ? `<div class="domain-tags">${tags.map(t => `<span class="domain-tag">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
-      ${skills.length ? `<div class="skills-tags">${skills.map(s => `<span class="skill-tag">⚡ ${escapeHtml(s)}</span>`).join("")}</div>` : ""}
+      ${skills.length ? `<div class="skills-tags">${skills.map(s => `<span class="skill-tag">${escapeHtml(s)}</span>`).join("")}</div>` : ""}
 
       <div class="card-actions" onclick="event.stopPropagation()">
-        <a class="btn-card apply" href="${escapeHtml(directUrl)}" target="_blank" rel="noopener" title="Direct verified application URL">🔗 Apply</a>
-        <button class="btn-card" onclick="openPitchGenerator('${j.id}')" title="Generate tailored cold message & cover letter">⚡ Pitch</button>
-        <button class="btn-card" onclick="openSubscribeForJob('${escapeHtml(j.company)}', '${escapeHtml(j.title)}')" title="Watchlist this company & role">🔔</button>
-        <button class="btn-card" onclick="openRecruiterSearch('${escapeHtml(j.company)}')" title="Find recruiters & hiring managers on LinkedIn">👥 Recruiter</button>
+        <a class="btn-card apply" href="${escapeHtml(directUrl)}" target="_blank" rel="noopener" title="Direct application portal">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+          <span>Apply</span>
+        </a>
+        <button class="btn-card" onclick="openPitchGenerator('${j.id}')" title="Generate tailored outreach pitch">
+          <svg class="icon-svg" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+          <span>Pitch</span>
+        </button>
+        <button class="btn-card" onclick="openSubscribeForJob('${escapeHtml(j.company)}', '${escapeHtml(j.title)}')" title="Add to watchlist alerts">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+          <span>Track</span>
+        </button>
+        <button class="btn-card" onclick="openRecruiterSearch('${escapeHtml(j.company)}')" title="Find recruiters on LinkedIn">
+          <svg class="icon-svg" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+          <span>Recruiter</span>
+        </button>
         <button class="btn-card ${isApplied ? 'mark-applied done' : 'mark-applied'}"
           onclick="${isApplied ? `unmarkApplied('${j.id}', this)` : `markApplied('${j.id}', this)`}">
-          ${isApplied ? '✅ Applied' : '📋 Mark'}
+          ${isApplied ? 'Applied' : 'Mark'}
         </button>
-        <button class="btn-card" onclick="copyLink('${escapeHtml(directUrl)}')" title="Copy direct link">📋</button>
+        <button class="btn-card" onclick="copyLink('${escapeHtml(directUrl)}')" title="Copy direct link">
+          <svg class="icon-svg" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+        </button>
       </div>
     </div>`;
   }).join("");
@@ -498,8 +538,8 @@ function renderJobTable(jobs) {
     return `<tr onclick="openJobModal('${j.id}')">
       <td class="td-title" data-label="Title">
         ${escapeHtml(j.title)}
-        ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match" style="font-size:0.68rem;padding:1px 6px;margin-left:4px" title="Matched Watchlist">🎯 Watchlist</span>' : ''}
-        <span class="badge ${scoreBadge}" style="font-size:0.68rem;padding:1px 6px;margin-left:4px">🎯 ${match.score}%</span>
+        ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match" style="font-size:0.68rem;padding:1px 6px;margin-left:4px" title="Matched Watchlist">Watchlist</span>' : ''}
+        <span class="badge ${scoreBadge}" style="font-size:0.68rem;padding:1px 6px;margin-left:4px">${match.score}%</span>
       </td>
       <td data-label="Company">${escapeHtml(j.company)}</td>
       <td class="td-location" data-label="Location">${escapeHtml(j.location || 'Remote')}</td>
@@ -509,14 +549,14 @@ function renderJobTable(jobs) {
       <td data-label="Apply" onclick="event.stopPropagation()">
         <div style="display:flex;gap:4px;align-items:center">
           <a class="btn-card apply" href="${escapeHtml(directUrl)}" target="_blank" rel="noopener" style="display:inline-flex;padding:4px 10px;font-size:0.75rem">Apply</a>
-          <button class="btn-sm" onclick="openPitchGenerator('${j.id}')" title="Pitch Generator">⚡</button>
-          <button class="btn-sm" onclick="openSubscribeForJob('${escapeHtml(j.company)}', '${escapeHtml(j.title)}')" title="Watchlist">🔔</button>
+          <button class="btn-sm" onclick="openPitchGenerator('${j.id}')" title="Pitch Generator">Pitch</button>
+          <button class="btn-sm" onclick="openSubscribeForJob('${escapeHtml(j.company)}', '${escapeHtml(j.title)}')" title="Watchlist">Track</button>
         </div>
       </td>
       <td data-label="Applied?" onclick="event.stopPropagation()">
         ${isApplied
-          ? `<button class="btn-sm" onclick="unmarkApplied('${j.id}', this)">✅ Applied</button>`
-          : `<button class="btn-sm" onclick="markApplied('${j.id}', this)">Mark</button>`}
+          ? `<button class="btn-sm mark-applied done" onclick="unmarkApplied('${j.id}', this)">Applied</button>`
+          : `<button class="btn-sm mark-applied" onclick="markApplied('${j.id}', this)">Mark</button>`}
       </td>
     </tr>`;
   }).join("");
@@ -677,7 +717,7 @@ async function openJobModal(jobId) {
     const skills = j.skills_required || [];
     const tags = j.domain_tags || [];
     const seniority = j.seniority_level || "mid";
-    const seniorityLabel = { internship: "🎓 Internship", fresher: "🟢 Entry-Level", junior: "🔵 Junior", associate: "🟡 Associate", mid: "🔵 Junior", senior: "🟡 Experienced" }[seniority] || seniority;
+    const seniorityLabel = { internship: "Internship", fresher: "Entry-Level", junior: "Junior", associate: "Associate", mid: "Junior", senior: "Experienced" }[seniority] || seniority;
 
     // Calculate match
     const match = calculateMatchScore(j);
@@ -689,61 +729,64 @@ async function openJobModal(jobId) {
     body.innerHTML = `
       <div class="job-detail-section">
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;align-items:center">
-          ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match">🎯 Watchlist Match</span>' : ''}
-          <span class="badge ${scoreBadge}">🎯 ${match.score}% Match</span>
-          <span class="badge badge-type">${j.job_type === 'internship' ? '🎓 Internship' : '💼 Fresher Job'}</span>
+          ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match">Watchlist Match</span>' : ''}
+          <span class="badge ${scoreBadge}">${match.score}% Match</span>
+          <span class="badge badge-type">${j.job_type === 'internship' ? 'Internship' : 'Job'}</span>
           <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>
-          ${j.remote ? '<span class="badge badge-remote">🌍 Remote</span>' : ''}
+          ${j.remote ? '<span class="badge badge-remote">Remote</span>' : ''}
           ${j.target_badge ? `<span class="badge badge-target">${j.target_badge}</span>` : ''}
-          ${isApplied ? '<span class="badge badge-applied">✅ Applied</span>' : ''}
+          ${isApplied ? '<span class="badge badge-applied">Applied</span>' : ''}
         </div>
         ${tags.length ? `<div class="domain-tags" style="margin-bottom:8px">${tags.map(t => `<span class="domain-tag">${escapeHtml(t)}</span>`).join("")}</div>` : ""}
-        ${skills.length ? `<div class="skills-tags">${skills.slice(0,10).map(s => `<span class="skill-tag">⚡ ${escapeHtml(s)}</span>`).join("")}</div>` : ""}
+        ${skills.length ? `<div class="skills-tags">${skills.slice(0,10).map(s => `<span class="skill-tag">${escapeHtml(s)}</span>`).join("")}</div>` : ""}
       </div>
 
       <!-- Skills Match Breakdown -->
       <div class="job-detail-section matched-tags-section">
-        <h4 style="margin-bottom:6px">🎯 Resume & Keyword Compatibility</h4>
+        <h4 style="margin-bottom:6px">Resume & Keyword Compatibility</h4>
         <div style="margin-bottom:6px">
           <span style="font-size:0.75rem;color:var(--text-muted)">Matched Skills:</span>
-          ${match.matched.length ? match.matched.map(m => `<span class="tag-pill-match">✓ ${escapeHtml(m)}</span>`).join("") : '<span style="font-size:0.75rem;color:var(--text-muted)"> None matched yet</span>'}
+          ${match.matched.length ? match.matched.map(m => `<span class="tag-pill-match">${escapeHtml(m)}</span>`).join("") : '<span style="font-size:0.75rem;color:var(--text-muted)"> None matched yet</span>'}
         </div>
         <div>
           <span style="font-size:0.75rem;color:var(--text-muted)">Missing Keywords to Add:</span>
-          ${match.missing.length ? match.missing.map(m => `<span class="tag-pill-missing">+ ${escapeHtml(m)}</span>`).join("") : '<span style="font-size:0.75rem;color:var(--text-muted)"> All key cyber terms present!</span>'}
+          ${match.missing.length ? match.missing.map(m => `<span class="tag-pill-missing">+ ${escapeHtml(m)}</span>`).join("") : '<span style="font-size:0.75rem;color:var(--text-muted)"> All key cyber terms present</span>'}
         </div>
       </div>
 
       <div class="job-detail-section">
-        <h4>🔗 Application & Networking Hub</h4>
+        <h4>Application & Networking Hub</h4>
         <div class="apply-hub">
-          <a class="apply-btn primary" href="${escapeHtml(routes.direct_url || '#')}" target="_blank" rel="noopener">🎯 Direct Apply (Verified Active)</a>
-          <button class="apply-btn" onclick="openPitchGenerator('${j.id}')">⚡ Instant Pitch & Cover Letter</button>
-          <button class="apply-btn" onclick="openSubscribeForJob('${escapeHtml(j.company)}', '${escapeHtml(j.title)}')">🔔 Watchlist Company & Role</button>
-          <button class="apply-btn" onclick="openRecruiterSearch('${escapeHtml(j.company)}')">👥 Find Recruiters on LinkedIn</button>
-          <button class="apply-btn" onclick="openCompanyResearch('${escapeHtml(j.company)}', 'levels')">💰 Levels.fyi Salaries</button>
-          <button class="apply-btn" onclick="openCompanyResearch('${escapeHtml(j.company)}', 'glassdoor')">⭐ Glassdoor Reviews</button>
-          <a class="apply-btn" href="${escapeHtml(routes.linkedin_jobs_url || '#')}" target="_blank" rel="noopener">💼 LinkedIn Job Search</a>
+          <a class="apply-btn primary" href="${escapeHtml(routes.direct_url || '#')}" target="_blank" rel="noopener">Direct Apply (Verified Active)</a>
+          <button class="apply-btn" onclick="openPitchGenerator('${j.id}')">Instant Pitch & Cover Letter</button>
+          <button class="apply-btn" onclick="openSubscribeForJob('${escapeHtml(j.company)}', '${escapeHtml(j.title)}')">Watchlist Company & Role</button>
+          <button class="apply-btn" onclick="openRecruiterSearch('${escapeHtml(j.company)}')">Find Recruiters on LinkedIn</button>
+          <button class="apply-btn" onclick="openCompanyResearch('${escapeHtml(j.company)}', 'levels')">Levels.fyi Salaries</button>
+          <button class="apply-btn" onclick="openCompanyResearch('${escapeHtml(j.company)}', 'glassdoor')">Glassdoor Reviews</button>
+          <a class="apply-btn" href="${escapeHtml(routes.linkedin_jobs_url || '#')}" target="_blank" rel="noopener">LinkedIn Job Search</a>
         </div>
       </div>
 
       <div class="job-detail-section">
-        <h4>📄 Description</h4>
+        <h4>Description</h4>
         <div class="job-description">${escapeHtml(j.description || "No description available.")}</div>
       </div>
 
       <div class="job-detail-section" style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn-action ${isApplied ? 'btn-primary' : ''}" id="modal-apply-btn"
           onclick="${isApplied ? `unmarkApplied('${j.id}', this)` : `markApplied('${j.id}', this)`}">
-          ${isApplied ? '✅ Already Applied' : '📋 Mark as Applied'}
+          ${isApplied ? 'Already Applied' : 'Mark as Applied'}
         </button>
-        <button class="btn-action" onclick="addFollowUpCalendarForJob('${j.id}')">📅 Add 5d Follow-Up to G-Cal</button>
-        <button class="btn-action" onclick="copyLink('${escapeHtml(routes.direct_url || '')}')">📋 Copy Link</button>
+        <button class="btn-action" onclick="addFollowUpCalendarForJob('${j.id}')">Add 5d Follow-Up to G-Cal</button>
+        <button class="btn-action" onclick="copyLink('${escapeHtml(routes.direct_url || '')}')">Copy Link</button>
         <span style="font-size:0.75rem;color:var(--text-muted);align-self:center">Source: ${escapeHtml(j.source || '')} • ${formatDate(j.discovered_at)}</span>
       </div>
     `;
   } catch(e) {
-    body.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Error loading job</h3><p>${e.message}</p></div>`;
+    body.innerHTML = `<div class="empty-state">
+      <div class="empty-icon"><svg class="icon-svg-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></div>
+      <h3>Error loading job</h3><p>${escapeHtml(e.message)}</p>
+    </div>`;
   }
 }
 function closeJobModal() {
@@ -756,16 +799,16 @@ async function markApplied(jobId, btn) {
     const res = await fetch(`/api/applications/${jobId}/apply`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
     if (!res.ok) throw new Error();
     state.appliedIds.add(jobId);
-    if (btn) { btn.textContent = "✅ Applied"; btn.classList.add("done"); }
-    showToast("✅ Marked as applied!");
+    if (btn) { btn.textContent = "Applied"; btn.classList.add("done"); }
+    showToast("Marked as applied");
     loadStats();
-  } catch(e) { showToast("❌ Could not mark as applied", 3000); }
+  } catch(e) { showToast("Could not mark as applied", 3000); }
 }
 async function unmarkApplied(jobId, btn) {
   try {
     await fetch(`/api/applications/${jobId}`, { method: "DELETE" });
     state.appliedIds.delete(jobId);
-    if (btn) { btn.textContent = "📋 Mark Applied"; btn.classList.remove("done"); }
+    if (btn) { btn.textContent = "Mark Applied"; btn.classList.remove("done"); }
     showToast("Removed from applied list.");
     loadStats();
   } catch(e) {}
@@ -784,7 +827,10 @@ async function showAppliedJobs() {
     const data = await res.json();
     const items = data.items || [];
     if (!items.length) {
-      list.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><h3>No applications yet</h3><p>Mark jobs as Applied to track them here.</p></div>';
+      list.innerHTML = '<div class="empty-state">
+        <div class="empty-icon"><svg class="icon-svg-lg" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></div>
+        <h3>No applications yet</h3><p>Mark jobs as Applied to track them here.</p>
+      </div>';
       return;
     }
     list.innerHTML = items.map(j => {
@@ -794,13 +840,16 @@ async function showAppliedJobs() {
         <div class="applied-item-company">${escapeHtml(j.company)} • ${escapeHtml(j.location || '')}</div>
         <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:8px">Applied: ${formatDate(j.applied_at)}</div>
         <div class="applied-item-actions">
-          <a class="btn-sm" href="${escapeHtml(routes.direct_url || '#')}" target="_blank">🔗 Apply Again</a>
-          <button class="btn-sm danger" onclick="unmarkApplied('${j.id}', this);this.closest('.applied-item').remove()">✕ Remove</button>
+          <a class="btn-sm" href="${escapeHtml(routes.direct_url || '#')}" target="_blank">Apply Again</a>
+          <button class="btn-sm danger" onclick="unmarkApplied('${j.id}', this);this.closest('.applied-item').remove()">Remove</button>
         </div>
       </div>`;
     }).join("");
   } catch(e) {
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">⚠️</div><h3>Error loading applications</h3></div>';
+    list.innerHTML = '<div class="empty-state">
+      <div class="empty-icon"><svg class="icon-svg-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></div>
+      <h3>Error loading applications</h3>
+    </div>';
   }
 }
 function hideAppliedJobs() {
@@ -810,17 +859,17 @@ function hideAppliedJobs() {
 
 // ===== SCRAPE =====
 async function triggerScrape() {
-  const btn = document.querySelector(".btn-primary");
-  if (btn) { btn.disabled = true; btn.textContent = "⟳ Scraping..."; }
+  const btn = document.getElementById("scrape-feeds-btn") || document.querySelector(".btn-primary");
+  if (btn) { btn.disabled = true; }
   try {
     const res = await fetch("/api/scrape", { method: "POST" });
     const data = await res.json();
-    showToast(data.status === "initiated" ? "⚡ Scrape started! Watch for new job alerts." : `⚠️ ${data.message}`, 4000);
+    showToast(data.status === "initiated" ? "Scrape cycle started in background" : data.message, 4000);
   } catch(e) {
-    showToast("❌ Scrape trigger failed", 3000);
+    showToast("Scrape trigger failed", 3000);
   } finally {
     setTimeout(() => {
-      if (btn) { btn.disabled = false; btn.textContent = "⚡ Scrape Now"; }
+      if (btn) { btn.disabled = false; }
     }, 8000);
   }
 }
@@ -861,8 +910,8 @@ function showToast(msg, duration = 2500) {
   setTimeout(() => t.classList.add("hidden"), duration);
 }
 function copyLink(url) {
-  if (!url || url === "#") { showToast("⚠️ No link to copy", 2000); return; }
-  navigator.clipboard.writeText(url).then(() => showToast("📋 Link copied!")).catch(() => showToast("❌ Could not copy"));
+  if (!url || url === "#") { showToast("No link to copy", 2000); return; }
+  navigator.clipboard.writeText(url).then(() => showToast("Link copied to clipboard")).catch(() => showToast("Could not copy link"));
 }
 function escapeHtml(str) {
   if (!str) return "";
@@ -887,7 +936,7 @@ function formatDate(iso) {
 }
 
 // =========================================================================
-// 🎯 RESUME & SKILLS KEYWORD MATCHER
+// RESUME & SKILLS KEYWORD MATCHER
 // =========================================================================
 function calculateMatchScore(job) {
   const skills = state.userSkills || [];
@@ -976,7 +1025,7 @@ function saveUserSkills() {
   state.userSkills = [...new Set(parsed)];
   localStorage.setItem("userSkills", JSON.stringify(state.userSkills));
   toggleProfileModal();
-  showToast("💾 Saved skills! Updating match scores...");
+  showToast("Saved skills profile. Recalculating match scores...");
   loadJobs();
 }
 
@@ -985,11 +1034,11 @@ function resetUserSkills() {
   localStorage.setItem("userSkills", JSON.stringify(state.userSkills));
   document.getElementById("user-skills-input").value = state.userSkills.join(", ");
   renderQuickSkillsChips();
-  showToast("🔄 Reset to standard cyber student skills.");
+  showToast("Skills reset to default cyber baseline.");
 }
 
 // =========================================================================
-// ⚡ INSTANT OUTREACH & COLD PITCH GENERATOR
+// INSTANT OUTREACH & COLD PITCH GENERATOR
 // =========================================================================
 function openPitchGenerator(jobId) {
   let job = state.jobCache[jobId];
@@ -1007,7 +1056,7 @@ function openPitchGenerator(jobId) {
 
 function initPitchModal(job) {
   state.currentPitchTab = "linkedin";
-  document.getElementById("pitch-modal-title").textContent = `⚡ Outreach: ${job.company}`;
+  document.getElementById("pitch-modal-title").textContent = `Outreach: ${job.company}`;
   document.getElementById("pitch-modal-sub").textContent = `${job.title} • ${job.location || 'Remote'}`;
 
   document.querySelectorAll("#pitch-tabs .pill").forEach(p => p.classList.remove("active"));
@@ -1075,11 +1124,11 @@ Sincerely,
 function copyPitchText() {
   const textarea = document.getElementById("pitch-output");
   navigator.clipboard.writeText(textarea.value).then(() => {
-    showToast("📋 Pitch copied to clipboard!");
+    showToast("Pitch copied to clipboard");
   }).catch(() => {
     textarea.select();
     document.execCommand("copy");
-    showToast("📋 Copied!");
+    showToast("Copied to clipboard");
   });
 }
 
@@ -1121,7 +1170,7 @@ function addFollowUpCalendarForJob(jobId) {
 }
 
 // =========================================================================
-// 📋 KANBAN PIPELINE BOARD
+// KANBAN PIPELINE BOARD
 // =========================================================================
 function renderKanban(jobs) {
   const stages = ["saved", "applied", "interviewing", "offer", "rejected"];
@@ -1167,20 +1216,20 @@ function renderKanban(jobs) {
       <div class="kanban-card-title">${escapeHtml(j.title)}</div>
       <div class="kanban-card-company">${escapeHtml(j.company)} • ${escapeHtml(j.location || 'Remote')}</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px">
-        <span class="badge ${scoreBadge}">🎯 ${match.score}%</span>
-        <span class="badge badge-type">${j.job_type === 'internship' ? '🎓' : '💼'}</span>
+        <span class="badge ${scoreBadge}">${match.score}%</span>
+        <span class="badge badge-type">${j.job_type === 'internship' ? 'Intern' : 'Job'}</span>
       </div>
       <div class="kanban-card-controls">
         <select class="kanban-stage-select" onchange="changeJobStage('${j.id}', this.value)">
-          <option value="saved" ${stage === 'saved' ? 'selected' : ''}>📌 Saved</option>
-          <option value="applied" ${stage === 'applied' ? 'selected' : ''}>📨 Applied</option>
-          <option value="interviewing" ${stage === 'interviewing' ? 'selected' : ''}>💬 Interview</option>
-          <option value="offer" ${stage === 'offer' ? 'selected' : ''}>🎉 Offer</option>
-          <option value="rejected" ${stage === 'rejected' ? 'selected' : ''}>❌ Rejected</option>
+          <option value="saved" ${stage === 'saved' ? 'selected' : ''}>Saved</option>
+          <option value="applied" ${stage === 'applied' ? 'selected' : ''}>Applied</option>
+          <option value="interviewing" ${stage === 'interviewing' ? 'selected' : ''}>Interview</option>
+          <option value="offer" ${stage === 'offer' ? 'selected' : ''}>Offer</option>
+          <option value="rejected" ${stage === 'rejected' ? 'selected' : ''}>Archived</option>
         </select>
         <div style="display:flex;gap:4px">
-          <button class="btn-sm" onclick="openPitchGenerator('${j.id}')" title="Pitch Generator">⚡</button>
-          <a class="btn-sm" href="${escapeHtml(j.apply_url || '#')}" target="_blank" rel="noopener" title="Direct Apply">🔗</a>
+          <button class="btn-sm" onclick="openPitchGenerator('${j.id}')" title="Pitch Generator">Pitch</button>
+          <a class="btn-sm" href="${escapeHtml(j.apply_url || '#')}" target="_blank" rel="noopener" title="Direct Apply">Apply</a>
         </div>
       </div>
     `;
@@ -1210,12 +1259,12 @@ function changeJobStage(jobId, newStage) {
 }
 
 // =========================================================================
-// 📤 EXPORT: NOTION TABLE
+// EXPORT: NOTION TABLE
 // =========================================================================
 function copyNotionTable() {
   const jobs = Object.values(state.jobCache);
   if (!jobs.length) {
-    showToast("⚠️ No opportunities currently loaded", 2500);
+    showToast("No opportunities currently loaded", 2500);
     return;
   }
   let md = "| Opportunity | Company | Location | Type | Status | Apply Link |\n";
@@ -1225,14 +1274,14 @@ function copyNotionTable() {
     md += `| ${j.title} | ${j.company} | ${j.location || 'Remote'} | ${j.job_type} | ${stage} | [Direct Apply](${j.apply_url || ''}) |\n`;
   });
   navigator.clipboard.writeText(md).then(() => {
-    showToast("📋 Copied Notion-ready Markdown Table (50 rows)!");
+    showToast("Copied Markdown table to clipboard (50 rows)");
   }).catch(() => {
-    showToast("❌ Clipboard write denied", 2500);
+    showToast("Clipboard write permission denied", 2500);
   });
 }
 
 // =========================================================================
-// 💡 TECHNICAL INTERVIEW PREP CHEAT SHEET
+// TECHNICAL INTERVIEW PREP CHEAT SHEET
 // =========================================================================
 const INTERVIEW_DATA = {
   soc: [
@@ -1342,13 +1391,13 @@ function switchInterviewTab(tab) {
     <div class="cheat-item">
       <div class="cheat-q">Q${idx + 1}. ${escapeHtml(item.q)}</div>
       <div class="cheat-a">${item.a}</div>
-      ${item.tip ? `<div class="cheat-tip">💡 Pro Tip: ${escapeHtml(item.tip)}</div>` : ''}
+      ${item.tip ? `<div class="cheat-tip"><strong>Pro Tip:</strong> ${escapeHtml(item.tip)}</div>` : ''}
     </div>
   `).join("");
 }
 
 // =========================================================================
-// 🔊 WEB AUDIO API SYNTHESIZER (ZERO ASSETS / 100% FREE)
+// WEB AUDIO API SYNTHESIZER (ZERO ASSETS / 100% FREE)
 // =========================================================================
 let _audioCtx = null;
 function getAudioContext() {
@@ -1405,13 +1454,18 @@ function toggleSound() {
   const next = !current;
   localStorage.setItem("soundEnabled", next ? "true" : "false");
   const btn = document.getElementById("sound-toggle");
-  if (btn) btn.textContent = next ? "🔊" : "🔇";
+  if (btn) {
+    btn.innerHTML = next
+      ? '<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>'
+      : '<svg class="icon-svg" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>';
+    btn.setAttribute("title", next ? "Mute Audio Feedback" : "Enable Audio Feedback");
+  }
   if (next) playCyberSound('apply');
-  showToast(next ? "🔊 Audio FX Enabled" : "🔇 Audio FX Muted");
+  showToast(next ? "Audio Feedback Enabled" : "Audio Feedback Muted");
 }
 
 // =========================================================================
-// 🔀 KANBAN DRAG AND DROP HANDLERS
+// KANBAN DRAG AND DROP HANDLERS
 // =========================================================================
 function handleDragOver(e) {
   e.preventDefault();
@@ -1436,7 +1490,7 @@ function handleDrop(e, targetStage) {
 }
 
 // =========================================================================
-// 📄 RESUME DRAG-AND-DROP PARSER
+// RESUME DRAG-AND-DROP PARSER
 // =========================================================================
 function handleResumeDrop(e) {
   e.preventDefault();
@@ -1452,7 +1506,7 @@ function handleResumeFileSelect(e) {
 }
 
 function parseResumeFile(file) {
-  showToast(`📄 Parsing ${file.name}...`);
+  showToast(`Parsing ${file.name}...`);
   const reader = new FileReader();
   reader.onload = (evt) => {
     const content = evt.target.result || "";
@@ -1473,7 +1527,7 @@ function extractAndApplySkillsFromText(text) {
   ];
   const detected = dictionary.filter(skill => textLow.includes(skill));
   if (!detected.length) {
-    showToast("⚠️ No direct cybersecurity keywords identified in file", 3000);
+    showToast("No direct cybersecurity keywords identified in document", 3000);
     return;
   }
   state.userSkills = [...new Set([...state.userSkills, ...detected])];
@@ -1481,11 +1535,11 @@ function extractAndApplySkillsFromText(text) {
   document.getElementById("user-skills-input").value = state.userSkills.join(", ");
   renderQuickSkillsChips();
   playCyberSound('pitch');
-  showToast(`🎯 Auto-extracted ${detected.length} skills from resume!`, 3000);
+  showToast(`Extracted ${detected.length} skills from resume`, 3000);
 }
 
 // =========================================================================
-// 🔔 JOBSCOOP WATCHLIST SUBSCRIPTIONS & MARKET INTELLIGENCE ENGINE
+// JOBSCOOP WATCHLIST SUBSCRIPTIONS & MARKET INTELLIGENCE ENGINE
 // =========================================================================
 
 function toggleSubscriptionsModal() {
@@ -1522,8 +1576,10 @@ async function loadSubscriptions() {
     if (!state.subscriptions.length) {
       listEl.innerHTML = `
         <div class="empty-state" style="padding:20px 0;">
-          <div class="empty-icon">🔔</div>
-          <p>No watchlists configured yet. Add your favorite company or role above!</p>
+          <div class="empty-icon">
+            <svg class="icon-svg-lg" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+          </div>
+          <p>No watchlists configured yet. Add your target company or role above.</p>
         </div>`;
       return;
     }
@@ -1546,20 +1602,20 @@ async function loadSubscriptions() {
         <div class="subscription-card ${isActive ? '' : 'inactive'}" id="sub-card-${sub.id}">
           <div class="sub-info">
             <div class="sub-title-row">
-              <span class="sub-company-tag">🏢 ${escapeHtml(comp)}</span>
-              <span class="sub-role-tag">🎯 ${escapeHtml(role)}</span>
+              <span class="sub-company-tag">${escapeHtml(comp)}</span>
+              <span class="sub-role-tag">${escapeHtml(role)}</span>
               <span class="sub-matches-badge" title="Live matching opportunities in grid">${matches} live match${matches !== 1 ? 'es' : ''}</span>
-              ${sub.notify_telegram ? '<span title="Telegram notifications active">⚡ TG</span>' : ''}
+              ${sub.notify_telegram ? '<span title="Telegram notifications active" class="badge">TG</span>' : ''}
             </div>
           </div>
           <div class="sub-card-actions">
-            <a href="${gJobsUrl}" target="_blank" rel="noopener" class="btn-ext-search" title="Search Google Jobs">🌐 Google</a>
-            <a href="${linkedInUrl}" target="_blank" rel="noopener" class="btn-ext-search" title="Search LinkedIn Jobs">💼 LinkedIn</a>
-            <a href="${indeedUrl}" target="_blank" rel="noopener" class="btn-ext-search" title="Search Indeed">🔍 Indeed</a>
+            <a href="${gJobsUrl}" target="_blank" rel="noopener" class="btn-ext-search" title="Search Google Jobs">Google</a>
+            <a href="${linkedInUrl}" target="_blank" rel="noopener" class="btn-ext-search" title="Search LinkedIn Jobs">LinkedIn</a>
+            <a href="${indeedUrl}" target="_blank" rel="noopener" class="btn-ext-search" title="Search Indeed">Indeed</a>
             <button class="btn-toggle-sub ${isActive ? 'active' : ''}" onclick="toggleSubscriptionActive(${sub.id})">
               ${isActive ? 'Active' : 'Paused'}
             </button>
-            <button class="btn-sm" style="color:var(--danger)" onclick="deleteSubscription(${sub.id})" title="Delete watchlist">🗑️</button>
+            <button class="btn-sm" style="color:var(--danger)" onclick="deleteSubscription(${sub.id})" title="Delete watchlist">Delete</button>
           </div>
         </div>`;
     }).join("");
@@ -1579,7 +1635,7 @@ async function handleCreateSubscription(e) {
   const notify_telegram = tgCheck ? tgCheck.checked : true;
 
   if (!company && !role) {
-    showToast("⚠️ Enter at least a target company or role keyword", 3000);
+    showToast("Specify a target company or role keyword", 3000);
     return;
   }
 
@@ -1590,14 +1646,14 @@ async function handleCreateSubscription(e) {
       body: JSON.stringify({ company, role, notify_telegram })
     });
     if (!res.ok) throw new Error("Could not create watchlist");
-    showToast("🎯 Watchlist subscription added!", 2500);
+    showToast("Watchlist subscription added", 2500);
     if (companyInput) companyInput.value = "";
     if (roleInput) roleInput.value = "";
     playCyberSound('apply');
     await loadSubscriptions();
     loadJobs();
   } catch (err) {
-    showToast(`⚠️ ${err.message}`, 3000);
+    showToast(err.message, 3000);
   }
 }
 
@@ -1609,7 +1665,7 @@ async function toggleSubscriptionActive(subId) {
     await loadSubscriptions();
     loadJobs();
   } catch (err) {
-    showToast(`⚠️ ${err.message}`, 3000);
+    showToast(err.message, 3000);
   }
 }
 
@@ -1623,7 +1679,7 @@ async function deleteSubscription(subId) {
     await loadSubscriptions();
     loadJobs();
   } catch (err) {
-    showToast(`⚠️ ${err.message}`, 3000);
+    showToast(err.message, 3000);
   }
 }
 
@@ -1660,7 +1716,7 @@ async function loadTrends(days = 30, btnEl = null) {
 
   const tbody = document.getElementById("correlation-table-body");
   const kpiEl = document.getElementById("trends-total-tracked");
-  if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;">⟳ Calculating correlation matrix...</td></tr>`;
+  if (tbody) tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:20px;">Calculating correlation matrix...</td></tr>`;
 
   try {
     const res = await fetch(`/api/trends/summary?days=${days}`);
@@ -1686,8 +1742,8 @@ async function loadTrends(days = 30, btnEl = null) {
     tbody.innerHTML = correlations.map(row => {
       return `
         <tr class="correlation-row" onclick="filterByCorrelation('${escapeHtml(row.company)}', '${escapeHtml(row.role)}')">
-          <td style="font-weight:600;color:var(--text-primary);">🏢 ${escapeHtml(row.company)}</td>
-          <td><span class="sub-role-tag">🎯 ${escapeHtml(row.role)}</span></td>
+          <td style="font-weight:600;color:var(--text-primary);">${escapeHtml(row.company)}</td>
+          <td><span class="sub-role-tag">${escapeHtml(row.role)}</span></td>
           <td><span class="correlation-freq-badge">${row.count} jobs</span></td>
           <td>
             <div class="correlation-bar-container">
@@ -1698,7 +1754,7 @@ async function loadTrends(days = 30, btnEl = null) {
             </div>
           </td>
           <td>
-            <button class="btn-sm" title="View jobs for ${escapeHtml(row.company)}">View Jobs ➔</button>
+            <button class="btn-sm" title="View jobs for ${escapeHtml(row.company)}">View Jobs</button>
           </td>
         </tr>`;
     }).join("");
@@ -1773,7 +1829,28 @@ function filterByCorrelation(company, role) {
   document.querySelectorAll("#scope-tabs .pill").forEach(p => p.classList.toggle("active", p.dataset.val === "all"));
   state.page = 1;
   applyFilters();
-  showToast(`🔍 Filtered grid: ${company} • ${role}`, 3000);
+  showToast(`Filtered grid: ${company} • ${role}`, 3000);
+}
+
+// ===== PRIVACY & TERMS MODALS =====
+function togglePrivacyModal(forceClose = false) {
+  const overlay = document.getElementById("privacy-modal-overlay");
+  if (!overlay) return;
+  if (forceClose || !overlay.classList.contains("hidden")) {
+    overlay.classList.add("hidden");
+  } else {
+    overlay.classList.remove("hidden");
+  }
+}
+
+function toggleTermsModal(forceClose = false) {
+  const overlay = document.getElementById("terms-modal-overlay");
+  if (!overlay) return;
+  if (forceClose || !overlay.classList.contains("hidden")) {
+    overlay.classList.add("hidden");
+  } else {
+    overlay.classList.remove("hidden");
+  }
 }
 
 
