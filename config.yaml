@@ -62,6 +62,11 @@ sources:
       url: "https://raw.githubusercontent.com/SimplifyJobs/Summer2024-Internships/dev/README.md"
       type: "markdown_list"
 
+    # --- SECNET: 500+ Live Security & Networking Internships ---
+    - name: "SecNet Security Internships"
+      url: "https://raw.githubusercontent.com/ihrtkaii/secnet-internships/main/README.md"
+      type: "markdown_list"
+
   json_apis:
     - name: "ArbeitNow Jobs API"
       url: "https://www.arbeitnow.com/api/job-board-api"

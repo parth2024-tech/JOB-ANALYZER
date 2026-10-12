@@ -423,8 +423,11 @@ class ScraperEngine:
                     role_clean = re.sub(r"[\U00010000-\U0010ffff]", "", role_clean).strip()
                     title = role_clean
 
-                    # Extract location
-                    location = cols[2] if len(cols) > 2 else "Remote"
+                    # Extract location (handle extra Track column if present)
+                    if len(cols) >= 5 and any(track in cols[2].lower() for track in ["security", "soc", "detection", "appsec", "infra", "network"]):
+                        location = cols[3]
+                    else:
+                        location = cols[2] if len(cols) > 2 else "Remote"
                     location = re.sub(r"<[^>]+>", "", location).strip()
 
                     # Extract URL
