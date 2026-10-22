@@ -1,4 +1,4 @@
-"""Tests for scraper module."""
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -129,13 +129,14 @@ class TestScraperEngine:
     @pytest.mark.asyncio
     async def test_scrape_linkedin_guest(self, temp_db):
         """Test LinkedIn Guest scraper parsing."""
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         async with ScraperEngine("/home/thor/Desktop/linkedin/config.yaml", temp_db) as scraper:
             src = SourceConfig(
                 name="LinkedIn Test",
                 url="https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=cybersecurity+intern&geoId=102713980",
                 type="linkedin_guest",
             )
-            sample_html = """
+            sample_html = f"""
             <ul>
               <li>
                 <div class="base-card">
@@ -143,7 +144,7 @@ class TestScraperEngine:
                   <h3 class="base-search-card__title">Cybersecurity Operations Intern</h3>
                   <h4 class="base-search-card__subtitle"><a href="#">CloudSec India</a></h4>
                   <span class="job-search-card__location">Bangalore, Karnataka, India</span>
-                  <time datetime="2026-09-29">1 day ago</time>
+                  <time datetime="{today}">1 day ago</time>
                   <img class="artdeco-entity-image" data-delayed-url="https://media.licdn.com/logo.png" />
                 </div>
               </li>
@@ -159,6 +160,7 @@ class TestScraperEngine:
     async def test_scrape_remotive(self, temp_db):
         """Test Remotive scraper parsing."""
         import json
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
         async with ScraperEngine("/home/thor/Desktop/linkedin/config.yaml", temp_db) as scraper:
             src = SourceConfig(
@@ -177,7 +179,7 @@ class TestScraperEngine:
                         "tags": ["security", "appsec"],
                         "description": "Fresher entry-level application security position",
                         "company_logo": "https://remotive.com/logo.png",
-                        "publication_date": "2026-09-29T10:00:00Z",
+                        "publication_date": f"{today}T10:00:00Z",
                     }
                 ]
             }
@@ -186,3 +188,98 @@ class TestScraperEngine:
                 new_jobs, total = await scraper.scrape_remotive(src)
                 assert total == 1
                 assert new_jobs == 1
+
+    @pytest.mark.asyncio
+    async def test_scrape_internshala_ajax(self, temp_db):
+        """Test Internshala AJAX scraper parsing."""
+        import json
+
+        async with ScraperEngine("/home/thor/Desktop/linkedin/config.yaml", temp_db) as scraper:
+            src = SourceConfig(
+                name="Internshala Bangalore Test",
+                url="https://internshala.com/internships_ajax/internship-in-bangalore/page-1",
+                type="internshala_ajax",
+            )
+            html_chunk = """
+            <div class="individual_internship" id="individual_internship_998877" internshipid="998877" employment_type="internship" data-href="/internship/detail/python-cyber-intern-998877">
+                <a class="job-title-href" href="/internship/detail/python-cyber-intern-998877">Cybersecurity Analyst Intern</a>
+                <a class="company-name">Acme Security Labs</a>
+                <div class="locations">Bangalore</div>
+                <div class="stipend">₹ 15,000 - 20,000 /month</div>
+                <div class="posted_by_container">2 days ago</div>
+            </div>
+            """
+            sample_payload = json.dumps({"internship_list_html": html_chunk})
+
+            with patch.object(scraper, "fetch", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = sample_payload
+                new_jobs, total = await scraper.scrape_internshala_ajax(src)
+                assert total == 1
+                assert new_jobs == 1
+
+                # Verify job inserted into DB with in-office and stipend properties
+                job_res = temp_db.get_jobs_filtered(in_office_india=True)
+                assert job_res["total"] >= 1
+                item = job_res["items"][0]
+                assert item["is_in_office_india"] is True
+                assert item["stipend_inr_monthly"] == 17500.0
+
+    @pytest.mark.asyncio
+    async def test_scrape_wellfound_seo(self, temp_db):
+        """Test Wellfound SEO SSR hydration state extraction."""
+        import json
+
+        async with ScraperEngine("/home/thor/Desktop/linkedin/config.yaml", temp_db) as scraper:
+            src = SourceConfig(
+                name="Wellfound India Test",
+                url="https://wellfound.com/role/l/security-engineer/india",
+                type="wellfound_seo",
+            )
+            apollo_data = {
+                "StartupResult:112233": {
+                    "__typename": "StartupResult",
+                    "id": "112233",
+                    "name": "SecuFlow Technologies",
+                    "logoUrl": "https://photos.wellfound.com/logo.jpg",
+                    "companySize": "11-50",
+                    "highConcept": "Cloud native security compliance automation",
+                    "highlightedJobListings": [{"__ref": "JobListingSearchResult:556677"}],
+                },
+                "JobListingSearchResult:556677": {
+                    "__typename": "JobListingSearchResult",
+                    "id": "556677",
+                    "title": "Junior Security Engineer",
+                    "slug": "junior-security-engineer",
+                    "compensation": "$60k – $80k",
+                    "locationNames": ["Bangalore", "Pune"],
+                    "remote": False,
+                    "jobType": "full-time",
+                    "atsSource": "AtsIntegration::Greenhouse::Listing",
+                    "description": "Develop and maintain secure cloud services",
+                    "yearsExperienceMin": 1,
+                    "liveStartAt": int(datetime.now(timezone.utc).timestamp()),
+                }
+            }
+            next_data = {
+                "props": {
+                    "pageProps": {
+                        "apolloState": {
+                            "data": apollo_data
+                        }
+                    }
+                }
+            }
+            sample_html = f'<html><body><script id="__NEXT_DATA__" type="application/json">{json.dumps(next_data)}</script></body></html>'
+
+            with patch.object(scraper, "fetch", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = sample_html
+                new_jobs, total = await scraper.scrape_wellfound_seo(src)
+                assert total == 1
+                assert new_jobs == 1
+
+                job_res = temp_db.get_jobs_filtered(search="SecuFlow")
+                assert job_res["total"] == 1
+                item = job_res["items"][0]
+                assert item["company"] == "SecuFlow Technologies"
+                assert item["ats_provider"] == "Greenhouse"
+

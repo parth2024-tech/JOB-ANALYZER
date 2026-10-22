@@ -273,6 +273,11 @@ class JobEntry:
     skills_required: str = "[]" # JSON list of extracted skills
     logo_url: str = ""
     min_exp_years: float | None = None
+    is_in_office_india: bool = False
+    stipend_inr_monthly: float | None = None
+    credibility_score: float = 1.0
+    ats_provider: str = ""
+    salary_display: str = ""
 
 
 INDIA_LOCATIONS = [
@@ -307,6 +312,17 @@ CYBER_TITLE_PATTERNS = [
     r'\b(bug bounty|ethical hack\w*)\b',
     r'\b(zero trust|cnapp|edr|xdr)\b',
     r'\bsecurity\b'
+]
+
+TECH_TITLE_PATTERNS = [
+    r'\b(software|developer|engineer|programmer|coder|swe|sde)\b',
+    r'\b(frontend|front[\s-]end|backend|back[\s-]end|fullstack|full[\s-]stack|development)\b',
+    r'\b(web\s*development|web\s*developer|mobile\s*developer|ios|android|app\s*development)\b',
+    r'\b(python|golang|rust|java|c\+\+|react|node|typescript|javascript|django|flask|spring)\b',
+    r'\b(devops|sre|site reliability|cloud|platform engineer|infrastructure|sysadmin|system admin)\b',
+    r'\b(data engineer|data scientist|machine learning|ai engineer|nlp|computer vision|ai|ml)\b',
+    r'\b(qa|qa\s*engineer|testing|tester|test\s*engineer|automation engineer|sdet)\b',
+    r'\b(computer science|information technology|cs intern|it intern|database|dba)\b',
 ]
 
 PHYSICAL_SECURITY_EXCLUSIONS = [
@@ -554,6 +570,68 @@ def is_strictly_cyber_job(title: str, description: str = "") -> bool:
     return False
 
 
+def is_tech_or_cyber_job(title: str, description: str = "") -> bool:
+    if not title:
+        return False
+    t = title.lower().strip()
+    for exc in PHYSICAL_SECURITY_EXCLUSIONS:
+        if re.search(exc, t):
+            return False
+    for exc in NON_CYBER_TITLE_EXCLUSIONS:
+        if re.search(exc, t):
+            return False
+    for p in CYBER_TITLE_PATTERNS:
+        if re.search(p, t):
+            return True
+    for p in TECH_TITLE_PATTERNS:
+        if re.search(p, t):
+            return True
+    return False
+
+
+_STIPEND_RANGE_RE = re.compile(
+    r'(?:₹|INR|Rs\.?)\s*(\d{1,3}(?:,\d{3})*|\d+)\s*[-–to]+\s*(?:₹|INR|Rs\.?)?\s*(\d{1,3}(?:,\d{3})*|\d+)\s*(?:/\s*month|per\s*month|/\s*mo|monthly)?',
+    re.IGNORECASE
+)
+_STIPEND_SINGLE_RE = re.compile(
+    r'(?:₹|INR|Rs\.?)\s*(\d{1,3}(?:,\d{3})*|\d+)\s*(?:/\s*month|per\s*month|/\s*mo|monthly|lump\s*sum|\b)',
+    re.IGNORECASE
+)
+
+
+def extract_stipend_inr(text: str) -> tuple[float | None, str]:
+    """Extract monthly stipend in INR from text and return (monthly_inr_amount, display_str)."""
+    if not text:
+        return None, ""
+    text_str = str(text).strip()
+    if re.search(r'\bunpaid\b', text_str, re.IGNORECASE):
+        return None, "Unpaid"
+    m_range = _STIPEND_RANGE_RE.search(text_str)
+    if m_range:
+        lo = float(m_range.group(1).replace(",", ""))
+        hi = float(m_range.group(2).replace(",", ""))
+        avg = (lo + hi) / 2.0
+        return avg, f"₹{int(lo):,}–₹{int(hi):,}/mo"
+    m_single = _STIPEND_SINGLE_RE.search(text_str)
+    if m_single:
+        val = float(m_single.group(1).replace(",", ""))
+        suffix = " lump sum" if re.search(r'lump\s*sum', text_str, re.IGNORECASE) else "/mo"
+        return val, f"₹{int(val):,}{suffix}"
+    return None, ""
+
+
+def is_in_office_india_opportunity(location: str | None, remote: bool, job_type: str = "") -> bool:
+    """Strictly identify if an opportunity is India-based and in-office."""
+    if remote:
+        return False
+    if not location:
+        return False
+    loc = location.lower().strip()
+    if any(k in loc for k in ["work from home", "remote", "wfh", "anywhere", "online"]):
+        return False
+    return is_india_location(location)
+
+
 def is_india_location(location: str | None) -> bool:
     if not location:
         return False
@@ -570,7 +648,7 @@ def is_india_location(location: str | None) -> bool:
 
 
 def is_target_opportunity(location: str | None, remote: Any, job_type: str | None, title: str = "", description: str = "") -> bool:
-    if not is_strictly_cyber_job(title, description):
+    if not is_tech_or_cyber_job(title, description):
         return False
     if not is_fresher_or_intern(title, description, job_type or ""):
         return False
@@ -585,9 +663,15 @@ def detect_seniority(title: str, job_type: str = "") -> str:
         return "fresher"
     if re.search(r'\b(junior|jr\.?)\b', t):
         return "junior"
+    if re.search(r'\b(lead|principal|staff|tech\s*lead|team\s*lead)\b', t):
+        return "lead"
+    if re.search(r'\b(manager|director|head\s*of|vp|vice\s*president|chief|ciso)\b', t):
+        return "manager"
+    if re.search(r'\b(senior|sr\.?|iii|3|experienced)\b', t):
+        return "senior"
     if re.search(r'\b(associate|analyst\s*i\b|engineer\s*i\b|level[\s-]1|l1|t1)\b', t):
         return "associate"
-    return "fresher"
+    return "mid"
 
 
 def extract_skills(description: str) -> list[str]:
@@ -739,7 +823,11 @@ class JobDatabase:
                     seniority_level TEXT DEFAULT 'mid',
                     skills_required TEXT DEFAULT '[]',
                     logo_url TEXT DEFAULT '',
-                    min_exp_years REAL DEFAULT NULL
+                    min_exp_years REAL DEFAULT NULL,
+                    is_in_office_india INTEGER DEFAULT 0,
+                    stipend_inr_monthly REAL DEFAULT NULL,
+                    credibility_score REAL DEFAULT 1.0,
+                    ats_provider TEXT DEFAULT ''
                 )
             """)
 
@@ -753,6 +841,10 @@ class JobDatabase:
                 ("company_category", "TEXT DEFAULT 'other'"),
                 ("logo_url", "TEXT DEFAULT ''"),
                 ("min_exp_years", "REAL DEFAULT NULL"),
+                ("is_in_office_india", "INTEGER DEFAULT 0"),
+                ("stipend_inr_monthly", "REAL DEFAULT NULL"),
+                ("credibility_score", "REAL DEFAULT 1.0"),
+                ("ats_provider", "TEXT DEFAULT ''"),
             ]:
                 try:
                     conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} {coldef}")
@@ -812,6 +904,7 @@ class JobDatabase:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_location_type_remote ON jobs(location, job_type, remote)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_company_category ON jobs(company_category)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_salary_lpa ON jobs(salary_inr_lpa_max)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_in_office_india ON jobs(is_in_office_india)")
 
             # FTS5 virtual table for full-text search
             conn.execute("""
@@ -884,32 +977,53 @@ class JobDatabase:
         return found
 
     def insert_job(self, job: JobEntry, keywords: list[str]) -> bool:
-        if not is_strictly_cyber_job(job.title, job.description):
+        if not is_tech_or_cyber_job(job.title, job.description):
             return False
-        if not is_fresher_or_intern(job.title, job.description, job.job_type):
+        if (job.job_type == "internship" or "intern" in job.title.lower()) and not is_fresher_or_intern(job.title, job.description, job.job_type):
             return False
         if not is_within_max_age(job.posted_date, job.discovered_at, max_days=14):
             return False
 
         job.discovered_at = datetime.now(timezone.utc).isoformat()
         job.hash = self._generate_hash(job)
-        job.job_type = self._classify_job_type(job.title, job.description)
+        if not job.job_type:
+            job.job_type = self._classify_job_type(job.title, job.description)
         job.domain_tags = self._extract_domain_tags(job.title + " " + job.description, keywords)
-        job.seniority_level = detect_seniority(job.title, job.job_type)
+        if not job.seniority_level:
+            job.seniority_level = detect_seniority(job.title, job.job_type)
         skills = extract_skills(job.description)
-        job.skills_required = json.dumps(skills)
+        if not job.skills_required or job.skills_required == "[]":
+            job.skills_required = json.dumps(skills)
 
-        # Salary & company category extraction
+        # Detect in-office India opportunity
+        is_in_office = is_in_office_india_opportunity(job.location, job.remote, job.job_type)
+        job.is_in_office_india = is_in_office or getattr(job, "is_in_office_india", False)
+
+        # Stipend & Salary Extraction
+        stipend_monthly, stipend_disp = extract_stipend_inr(f"{job.title} {job.description} {getattr(job, 'salary_display', '')}")
+        if stipend_monthly:
+            job.stipend_inr_monthly = stipend_monthly
+
         salary_info = extract_salary(f"{job.title} {job.description}")
-        salary_display = salary_info.get("salary_display", "")
+        salary_display = getattr(job, "salary_display", "") or salary_info.get("salary_display", "")
         salary_inr_lpa_min = salary_info.get("salary_inr_lpa_min")
         salary_inr_lpa_max = salary_info.get("salary_inr_lpa_max")
+
+        if getattr(job, "stipend_inr_monthly", None) and not salary_inr_lpa_max:
+            annual_lpa = (job.stipend_inr_monthly * 12) / INR_LPA_DIVISOR
+            salary_inr_lpa_min = round(annual_lpa, 2)
+            salary_inr_lpa_max = round(annual_lpa, 2)
+            if not salary_display:
+                salary_display = f"{stipend_disp} (~₹{annual_lpa:.1f}L/yr)"
+
         company_category = classify_company(job.company)
 
         # Experience & Logo extraction
         if job.min_exp_years is None:
             job.min_exp_years = extract_min_exp_years(job.title, job.description, job.job_type)
         logo_url = getattr(job, "logo_url", "") or ""
+        credibility_score = getattr(job, "credibility_score", 1.0)
+        ats_provider = getattr(job, "ats_provider", "") or ""
 
         with self._conn() as conn:
             try:
@@ -920,8 +1034,9 @@ class JobDatabase:
                         description, apply_url, posted_date, discovered_at, hash,
                         seniority_level, skills_required, salary_display,
                         salary_inr_lpa_min, salary_inr_lpa_max, company_category,
-                        logo_url, min_exp_years
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        logo_url, min_exp_years, is_in_office_india,
+                        stipend_inr_monthly, credibility_score, ats_provider
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     job.id, job.source, job.source_url, job.title, job.company,
                     job.location, int(job.remote), job.job_type,
@@ -930,7 +1045,8 @@ class JobDatabase:
                     job.posted_date, job.discovered_at, job.hash,
                     job.seniority_level, job.skills_required, salary_display,
                     salary_inr_lpa_min, salary_inr_lpa_max, company_category,
-                    logo_url, job.min_exp_years
+                    logo_url, job.min_exp_years, int(job.is_in_office_india),
+                    job.stipend_inr_monthly, credibility_score, ats_provider
                 ))
                 return True
             except sqlite3.IntegrityError:
@@ -1264,9 +1380,15 @@ class JobDatabase:
         page_size: int = 24,
         freshness: str = "",
         max_exp: float | None = None,
+        in_office_india: bool | None = None,
     ) -> dict[str, Any]:
         conditions: list[str] = []
         params: list[Any] = []
+
+        if in_office_india is True:
+            conditions.append("is_in_office_india = 1")
+        elif in_office_india is False:
+            conditions.append("is_in_office_india = 0")
 
         if search:
             # Try FTS5 first (fast), fallback to LIKE
@@ -1318,8 +1440,16 @@ class JobDatabase:
             params.append(1 if remote else 0)
 
         if source and source != "all":
-            conditions.append("source = ?")
-            params.append(source)
+            s_clean = source.strip()
+            if s_clean.lower() == "internshala":
+                conditions.append("source LIKE '%Internshala%'")
+            elif s_clean.lower() == "wellfound":
+                conditions.append("source LIKE '%Wellfound%'")
+            elif s_clean.lower() == "linkedin":
+                conditions.append("source LIKE '%LinkedIn%'")
+            else:
+                conditions.append("source = ?")
+                params.append(s_clean)
 
         india_sql_conditions = " OR ".join([f"location LIKE '%{k}%'" for k in INDIA_LOCATIONS])
         india_sql = f"(({india_sql_conditions}) AND location NOT LIKE '%Indiana%' AND location NOT LIKE '%Indianapolis%')"
@@ -1333,6 +1463,8 @@ class JobDatabase:
             conditions.append("(remote = 1 OR location LIKE '%Remote%' OR location LIKE '%Online%')")
         elif location_scope == "internship":
             conditions.append("(job_type = 'internship' OR seniority_level = 'internship')")
+        elif location_scope == "india_in_office_internship":
+            conditions.append("(is_in_office_india = 1 AND (job_type = 'internship' OR seniority_level = 'internship'))")
         elif location_scope == "fresher":
             conditions.append("(job_type != 'internship' AND seniority_level != 'internship')")
         elif location_scope == "subscriptions":
@@ -1400,10 +1532,14 @@ class JobDatabase:
 
                 matched_sub = match_subscription(tit, comp, active_subs)
                 item["is_india"] = is_ind
+                item["is_in_office_india"] = bool(item.get("is_in_office_india", 0))
+                item["stipend_inr_monthly"] = item.get("stipend_inr_monthly")
+                item["credibility_score"] = item.get("credibility_score", 1.0)
+                item["ats_provider"] = item.get("ats_provider", "")
                 item["is_target_match"] = is_tgt
                 item["is_subscribed_match"] = matched_sub is not None
                 item["matched_subscription"] = matched_sub
-                item["target_badge"] = "🇮🇳 India • Fresher / Intern" if is_ind else "🌐 Global • Fresher / Intern"
+                item["target_badge"] = "🇮🇳 India • In-Office Intern" if item["is_in_office_india"] and jt == "internship" else ("🇮🇳 India • Tech / Cyber" if is_ind else "🌐 Global • Tech / Cyber")
                 item["application_routes"] = generate_application_routes(tit, comp, item.get("apply_url"))
                 item["apply_url"] = item["application_routes"]["direct_url"]
                 item["applied"] = item["id"] in applied_ids
@@ -1481,9 +1617,14 @@ class JobDatabase:
             global_count = total - india_count
             freshers_count = total - internships
 
+            in_office_india_internships = conn.execute(
+                "SELECT COUNT(*) FROM jobs WHERE is_in_office_india = 1 AND (job_type = 'internship' OR seniority_level = 'internship')"
+            ).fetchone()[0]
+
             return {
                 "total": total,
                 "internships": internships,
+                "in_office_india_internships": in_office_india_internships,
                 "freshers_count": freshers_count,
                 "remote": remote_count,
                 "remote_pct": round((remote_count / total) * 100, 1) if total > 0 else 0,
@@ -1679,7 +1820,18 @@ class JobDatabase:
             rows = conn.execute("SELECT id, title, description, job_type, posted_date, discovered_at FROM jobs").fetchall()
             to_delete = []
             for r in rows:
-                if not is_fresher_or_intern(r["title"], r["description"] or "", r["job_type"] or "") or not is_within_max_age(r["posted_date"], r["discovered_at"], max_days=max_days):
+                tit = r["title"] or ""
+                desc = r["description"] or ""
+                jt = (r["job_type"] or "").lower()
+                is_intern = (jt == "internship") or ("intern" in tit.lower())
+
+                if not is_tech_or_cyber_job(tit, desc):
+                    to_delete.append(r["id"])
+                    continue
+                if is_intern and not is_fresher_or_intern(tit, desc, jt):
+                    to_delete.append(r["id"])
+                    continue
+                if not is_within_max_age(r["posted_date"], r["discovered_at"], max_days=max_days):
                     to_delete.append(r["id"])
 
             if to_delete:

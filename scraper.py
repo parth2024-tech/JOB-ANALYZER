@@ -4,7 +4,7 @@ import random
 import re
 import urllib.parse
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 import aiohttp
@@ -16,6 +16,8 @@ from database import (
     JobDatabase,
     JobEntry,
     is_strictly_cyber_job,
+    extract_stipend_inr,
+    is_in_office_india_opportunity,
 )
 
 USER_AGENTS = [
@@ -53,7 +55,9 @@ class ScraperEngine:
         self.session = aiohttp.ClientSession(
             connector=connector,
             timeout=timeout,
-            headers={"User-Agent": random.choice(USER_AGENTS)}
+            headers={"User-Agent": random.choice(USER_AGENTS)},
+            max_field_size=65536,
+            max_line_size=65536,
         )
         return self
 
@@ -61,12 +65,14 @@ class ScraperEngine:
         if self.session:
             await self.session.close()
 
-    async def fetch(self, url: str, retries: int = 3) -> str | None:
-        """Fetch URL with exponential-backoff retries and UA rotation."""
+    async def fetch(self, url: str, retries: int = 3, extra_headers: dict | None = None) -> str | None:
+        """Fetch URL with exponential-backoff retries, UA rotation, and optional custom headers."""
         async with self._sem:
             for attempt in range(retries):
                 try:
                     hdrs = {"User-Agent": random.choice(USER_AGENTS)}
+                    if extra_headers:
+                        hdrs.update(extra_headers)
                     async with self.session.get(url, headers=hdrs, allow_redirects=True) as resp:
                         if resp.status == 200:
                             return await resp.text(errors="replace")
@@ -145,6 +151,12 @@ class ScraperEngine:
 
         for src in sources_cfg.get("remoteok_sources", []):
             tasks.append(self._run_source(self.scrape_remoteok, SourceConfig(**src)))
+
+        for src in sources_cfg.get("internshala_sources", []):
+            tasks.append(self._run_source(self.scrape_internshala_ajax, SourceConfig(**src)))
+
+        for src in sources_cfg.get("wellfound_sources", []):
+            tasks.append(self._run_source(self.scrape_wellfound_seo, SourceConfig(**src)))
 
         results_list = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -1577,6 +1589,244 @@ class ScraperEngine:
                 count += 1
 
         print(f"[RemoteOK] {src.name}: {count}/{total} new cyber jobs")
+        return count, total
+
+    async def scrape_internshala_ajax(self, src: SourceConfig) -> tuple[int, int]:
+        """Scrape Internshala via public AJAX JSON endpoint returning server-rendered cards."""
+        print(f"[Internshala] Fetching {src.name}...")
+        hdrs = {
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+        }
+        raw_text = await self.fetch(src.url, extra_headers=hdrs)
+        if not raw_text:
+            print(f"[Internshala] Failed to fetch {src.url}")
+            return 0, 0
+
+        try:
+            data = json.loads(raw_text)
+        except Exception as e:
+            print(f"[Internshala] JSON decode error {src.url}: {e}")
+            return 0, 0
+
+        html_chunk = data.get("internship_list_html", "") or data.get("job_list_html", "")
+        if not html_chunk:
+            return 0, 0
+
+        soup = BeautifulSoup(html_chunk, "html.parser")
+        cards = soup.find_all("div", class_="individual_internship")
+        total = len(cards)
+        count = 0
+
+        today_dt = datetime.now(timezone.utc)
+        today_str = today_dt.strftime("%Y-%m-%d")
+
+        for c in cards:
+            title_elem = c.find(class_="job-title-href")
+            comp_elem = c.find(class_="company-name")
+            loc_elem = c.find(class_="locations")
+            stipend_elem = c.find(class_="stipend") or c.find(class_="desktop") or c.find(class_="salary")
+
+            title = title_elem.get_text(strip=True) if title_elem else ""
+            company = comp_elem.get_text(strip=True) if comp_elem else ""
+            if not title or not company:
+                continue
+
+            loc = loc_elem.get_text(strip=True) if loc_elem else "India"
+            href = c.get("data-href") or (title_elem.get("href") if title_elem else "")
+            if not href:
+                continue
+            apply_url = f"https://internshala.com{href}" if href.startswith("/") else href
+
+            internship_id = c.get("internshipid") or abs(hash(apply_url))
+
+            stipend_raw = stipend_elem.get_text(strip=True) if stipend_elem else ""
+            stipend_val, stipend_disp = extract_stipend_inr(stipend_raw)
+
+            is_wfh = "work from home" in loc.lower() or "remote" in loc.lower()
+            remote = is_wfh
+            is_in_office = is_in_office_india_opportunity(loc, remote)
+
+            card_text = c.get_text(separator=" ", strip=True)
+            posted_date = today_str
+            days_match = re.search(r"(\d+)\s+day[s]?\s+ago", card_text, re.IGNORECASE)
+            week_match = re.search(r"(\d+)\s+week[s]?\s+ago", card_text, re.IGNORECASE)
+            if days_match:
+                d_ago = int(days_match.group(1))
+                posted_date = (today_dt - timedelta(days=d_ago)).strftime("%Y-%m-%d")
+            elif week_match:
+                w_ago = int(week_match.group(1))
+                posted_date = (today_dt - timedelta(days=w_ago * 7)).strftime("%Y-%m-%d")
+            elif "yesterday" in card_text.lower():
+                posted_date = (today_dt - timedelta(days=1)).strftime("%Y-%m-%d")
+
+            emp_type = (c.get("employment_type") or "").lower()
+            is_intern = "intern" in emp_type or "intern" in title.lower() or "internship" in src.url
+            job_type = "internship" if is_intern else "full-time"
+
+            logo_elem = c.find("img")
+            logo_url = logo_elem.get("src") if logo_elem else ""
+
+            job = JobEntry(
+                id=f"internshala_{internship_id}",
+                source=src.name,
+                source_url=src.url,
+                title=title,
+                company=company,
+                location=loc,
+                remote=remote,
+                job_type=job_type,
+                domain_tags=[],
+                description=card_text[:4000],
+                apply_url=apply_url,
+                posted_date=posted_date,
+                logo_url=logo_url or "",
+                salary_display=stipend_disp,
+                min_exp_years=0.0 if is_intern else None,
+                is_in_office_india=is_in_office,
+                stipend_inr_monthly=stipend_val,
+                credibility_score=1.0,
+                ats_provider="Internshala"
+            )
+
+            if self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[Internshala] {src.name}: {count}/{total} new jobs inserted")
+        return count, total
+
+    async def scrape_wellfound_seo(self, src: SourceConfig) -> tuple[int, int]:
+        """Scrape Wellfound public SEO listing page by extracting __NEXT_DATA__ Apollo hydration state."""
+        print(f"[Wellfound] Fetching {src.name}...")
+        hdrs = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        html = await self.fetch(src.url, extra_headers=hdrs)
+        if not html:
+            print(f"[Wellfound] Failed to fetch {src.url}")
+            return 0, 0
+
+        soup = BeautifulSoup(html, "html.parser")
+        script_elem = soup.find("script", id="__NEXT_DATA__")
+        if not script_elem or not script_elem.string:
+            print(f"[Wellfound] __NEXT_DATA__ script tag missing for {src.url}")
+            return 0, 0
+
+        try:
+            next_data = json.loads(script_elem.string)
+        except Exception as e:
+            print(f"[Wellfound] JSON parse error on __NEXT_DATA__: {e}")
+            return 0, 0
+
+        apollo = next_data.get("props", {}).get("pageProps", {}).get("apolloState", {}).get("data", {})
+        if not apollo:
+            return 0, 0
+
+        job_startup_map: dict[str, dict[str, Any]] = {}
+        for k, v in apollo.items():
+            if k.startswith("StartupResult:") and isinstance(v, dict):
+                s_name = v.get("name", "")
+                s_logo = v.get("logoUrl", "")
+                s_size = v.get("companySize", "")
+                s_desc = v.get("highConcept", "")
+                for hl in v.get("highlightedJobListings", []):
+                    ref = hl.get("__ref") if isinstance(hl, dict) else None
+                    if ref:
+                        job_startup_map[ref] = {
+                            "name": s_name,
+                            "logo": s_logo,
+                            "size": s_size,
+                            "concept": s_desc,
+                        }
+
+        today_dt = datetime.now(timezone.utc)
+        today_str = today_dt.strftime("%Y-%m-%d")
+
+        job_results = [v for k, v in apollo.items() if k.startswith("JobListingSearchResult:") and isinstance(v, dict)]
+        total = len(job_results)
+        count = 0
+
+        for r in job_results:
+            jid = str(r.get("id", ""))
+            slug = r.get("slug", "")
+            title = r.get("title", "").strip()
+            if not title or not jid:
+                continue
+
+            ref_key = f"JobListingSearchResult:{jid}"
+            startup_info = job_startup_map.get(ref_key, {})
+            company = startup_info.get("name") or "Verified Startup"
+            logo_url = startup_info.get("logo") or ""
+
+            loc_names = r.get("locationNames", []) or []
+            loc_str = ", ".join(loc_names) if loc_names else "Global"
+            remote = bool(r.get("remote"))
+
+            raw_type = (r.get("jobType") or "full-time").lower()
+            is_intern = "intern" in raw_type or "intern" in title.lower()
+            job_type = "internship" if is_intern else "full-time"
+
+            is_in_office = is_in_office_india_opportunity(loc_str, remote)
+
+            live_start_at = r.get("liveStartAt")
+            if live_start_at and isinstance(live_start_at, (int, float)):
+                try:
+                    posted_date = datetime.fromtimestamp(live_start_at, tz=timezone.utc).strftime("%Y-%m-%d")
+                except Exception:
+                    posted_date = today_str
+            else:
+                posted_date = today_str
+
+            comp = r.get("compensation", "") or ""
+            desc = (r.get("description", "") or startup_info.get("concept", ""))[:4000]
+
+            ats_source = r.get("atsSource", "") or ""
+            ats_clean = ""
+            if "Greenhouse" in ats_source:
+                ats_clean = "Greenhouse"
+            elif "Lever" in ats_source:
+                ats_clean = "Lever"
+            elif "Workday" in ats_source:
+                ats_clean = "Workday"
+            elif ats_source:
+                ats_clean = ats_source.split("::")[-1].replace("Listing", "") or "ATS"
+
+            years_min = r.get("yearsExperienceMin")
+            if years_min is not None:
+                try:
+                    years_min = float(years_min)
+                except ValueError:
+                    years_min = 0.0 if is_intern else None
+            elif is_intern:
+                years_min = 0.0
+
+            apply_url = f"https://wellfound.com/jobs/{jid}-{slug}"
+
+            job = JobEntry(
+                id=f"wellfound_{jid}",
+                source=src.name,
+                source_url=src.url,
+                title=title,
+                company=company,
+                location=loc_str,
+                remote=remote,
+                job_type=job_type,
+                domain_tags=[],
+                description=desc,
+                apply_url=apply_url,
+                posted_date=posted_date,
+                logo_url=logo_url,
+                salary_display=comp,
+                min_exp_years=years_min,
+                is_in_office_india=is_in_office,
+                credibility_score=1.1,
+                ats_provider=ats_clean
+            )
+
+            if self.db.insert_job(job, self.keywords):
+                count += 1
+
+        print(f"[Wellfound] {src.name}: {count}/{total} new jobs inserted")
         return count, total
 
 

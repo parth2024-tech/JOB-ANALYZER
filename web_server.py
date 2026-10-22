@@ -213,6 +213,13 @@ class CyberSecWebServer:
         elif remote_val in ("0", "false", "no"):
             remote = False
 
+        in_office_val = params.get("in_office_india", "").lower().strip()
+        in_office_india: bool | None = None
+        if in_office_val in ("1", "true", "yes"):
+            in_office_india = True
+        elif in_office_val in ("0", "false", "no"):
+            in_office_india = False
+
         freshness = params.get("freshness", "").strip()
         max_exp: float | None = None
         try:
@@ -237,7 +244,8 @@ class CyberSecWebServer:
             min_salary_lpa=min_salary_lpa, sort_by=sort_by,
             location_scope=location_scope, target_only=target_only,
             page=page, page_size=page_size,
-            freshness=freshness, max_exp=max_exp
+            freshness=freshness, max_exp=max_exp,
+            in_office_india=in_office_india
         )
         return web.json_response(result)
 

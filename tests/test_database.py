@@ -371,3 +371,123 @@ class TestSubscriptionsAndTrends:
         assert item["min_exp_years"] == 0.0
         assert item["freshness_bucket"] == "1h"
 
+
+class TestWellfoundAndInternshalaExtensions:
+    """Test Wellfound & Internshala extensions: stipend parsing, in-office classification, and filters."""
+
+    def test_extract_stipend_inr(self):
+        from database import extract_stipend_inr
+
+        # Range
+        val, disp = extract_stipend_inr("₹ 18,000 - 20,000 /month")
+        assert val == 19000.0
+        assert "₹18,000" in disp
+
+        # Single
+        val2, disp2 = extract_stipend_inr("₹ 25,000 /month")
+        assert val2 == 25000.0
+        assert "₹25,000/mo" in disp2
+
+        # Lump sum
+        val3, disp3 = extract_stipend_inr("₹ 50,000 lump sum")
+        assert val3 == 50000.0
+
+        # Unpaid
+        val4, disp4 = extract_stipend_inr("Unpaid internship")
+        assert val4 is None
+        assert disp4 == "Unpaid"
+
+        # Empty/None
+        val5, disp5 = extract_stipend_inr("")
+        assert val5 is None
+        assert disp5 == ""
+
+    def test_in_office_india_classification(self):
+        from database import is_in_office_india_opportunity
+
+        # Bangalore in-office
+        assert is_in_office_india_opportunity("Bangalore, Karnataka", False) is True
+        # Pune in-office
+        assert is_in_office_india_opportunity("Pune", False) is True
+        # Work from home in Bangalore -> False (must be in-office)
+        assert is_in_office_india_opportunity("Bangalore (Work from home)", False) is False
+        assert is_in_office_india_opportunity("Bangalore", True) is False
+        # Foreign location -> False
+        assert is_in_office_india_opportunity("San Francisco, CA", False) is False
+        assert is_in_office_india_opportunity("London, UK", False) is False
+
+    def test_is_tech_or_cyber_job(self):
+        from database import is_tech_or_cyber_job
+
+        assert is_tech_or_cyber_job("Software Engineer Intern", "Python, React") is True
+        assert is_tech_or_cyber_job("Backend Developer", "Golang, Docker, AWS") is True
+        assert is_tech_or_cyber_job("Security Analyst", "SIEM, SOC, Splunk") is True
+        assert is_tech_or_cyber_job("Full Stack Engineer", "Node.js, Postgres") is True
+
+        # Non-tech roles should be rejected
+        assert is_tech_or_cyber_job("English Teacher", "Spoken English training") is False
+        assert is_tech_or_cyber_job("Nurse / Clinical Care", "Patient assistance") is False
+        assert is_tech_or_cyber_job("Accountant", "Tally, GST tax filing") is False
+
+    def test_in_office_india_db_filtering_and_stats(self, temp_db):
+        from datetime import datetime, timezone
+        from database import JobEntry
+
+        today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        # 1. In-Office India Intern
+        job1 = JobEntry(
+            id="test-in-office-1",
+            source="Internshala Bangalore In-Office Internships",
+            source_url="https://internshala.com",
+            title="Python Developer Intern",
+            company="DataCraft Labs",
+            location="Bangalore",
+            remote=False,
+            job_type="internship",
+            domain_tags=[],
+            description="Build APIs with FastAPI",
+            apply_url="https://internshala.com/internship/1",
+            posted_date=today_iso,
+            is_in_office_india=True,
+            stipend_inr_monthly=20000.0,
+            ats_provider="Internshala"
+        )
+        assert temp_db.insert_job(job1, []) is True
+
+        # 2. Remote Global Job
+        job2 = JobEntry(
+            id="test-remote-global-1",
+            source="Wellfound Global Software Engineer",
+            source_url="https://wellfound.com",
+            title="Junior Software Engineer",
+            company="NovaScale",
+            location="Remote",
+            remote=True,
+            job_type="full-time",
+            domain_tags=[],
+            description="Distributed systems engineering",
+            apply_url="https://wellfound.com/jobs/2",
+            posted_date=today_iso,
+            is_in_office_india=False,
+            ats_provider="Greenhouse"
+        )
+        assert temp_db.insert_job(job2, []) is True
+
+        # Query with in_office_india=True
+        in_office_res = temp_db.get_jobs_filtered(in_office_india=True)
+        assert in_office_res["total"] == 1
+        assert in_office_res["items"][0]["id"] == "test-in-office-1"
+        assert in_office_res["items"][0]["is_in_office_india"] is True
+        assert in_office_res["items"][0]["stipend_inr_monthly"] == 20000.0
+
+        # Query with location_scope="india_in_office_internship"
+        scope_res = temp_db.get_jobs_filtered(location_scope="india_in_office_internship")
+        assert scope_res["total"] == 1
+        assert scope_res["items"][0]["id"] == "test-in-office-1"
+
+        # Check stats includes in_office_india_internships
+        stats = temp_db.get_detailed_stats()
+        assert stats["in_office_india_internships"] >= 1
+
+

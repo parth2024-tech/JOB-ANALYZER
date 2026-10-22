@@ -474,6 +474,9 @@ function renderJobCards(jobs) {
         ${j.is_subscribed_match ? '<span class="badge badge-watchlist-match" title="Direct match with your active watchlist subscription">Watchlist Match</span>' : ''}
         ${freshnessTag}
         ${expBadge}
+        ${j.is_in_office_india ? '<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);" title="Verified In-Office Opportunity in India">🏢 In-Office India</span>' : ''}
+        ${j.stipend_inr_monthly ? `<span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4);" title="Monthly Internship Stipend">₹${Math.round(j.stipend_inr_monthly).toLocaleString('en-IN')}/mo</span>` : ''}
+        ${j.ats_provider ? `<span class="badge" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4);" title="Direct ATS Application Portal">${escapeHtml(j.ats_provider)}</span>` : ''}
         <span class="badge badge-type">${j.job_type === 'internship' ? 'Internship' : 'Job'}</span>
         <span class="badge ${scoreBadge}" title="Resume match based on your skills profile">${match.score}% Match</span>
         <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>
@@ -572,6 +575,8 @@ async function loadStats() {
     document.getElementById("kpi-target").textContent = (s.target_count || 0).toLocaleString();
     document.getElementById("kpi-india").textContent = (s.india_count || 0).toLocaleString();
     document.getElementById("kpi-globe").textContent = (s.global_remote_intern_count || 0).toLocaleString();
+    const inOfficeElem = document.getElementById("kpi-in-office-india");
+    if (inOfficeElem) inOfficeElem.textContent = (s.in_office_india_internships || 0).toLocaleString();
     document.getElementById("kpi-remote").textContent = `${s.remote_pct || 0}%`;
     document.getElementById("kpi-applied").textContent = (s.applied_count || 0).toLocaleString();
 

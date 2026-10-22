@@ -113,6 +113,10 @@
     <span class="kpi-val" id="kpi-globe">0</span>
     <span class="kpi-label">Global Roles</span>
   </div>
+  <div class="kpi-card india" title="India In-Office Internships Only">
+    <span class="kpi-val" id="kpi-in-office-india">0</span>
+    <span class="kpi-label">In-Office India Interns</span>
+  </div>
   <div class="kpi-card">
     <span class="kpi-val" id="kpi-applied">0</span>
     <span class="kpi-label">Applications</span>
@@ -127,6 +131,7 @@
       <label class="filter-label">Scope</label>
       <div class="tab-pills" id="scope-tabs">
         <button class="pill active" data-val="all" onclick="setFilter('location_scope', 'all', this, 'scope-tabs')">All Regions</button>
+        <button class="pill" data-val="india_in_office_internship" onclick="setFilter('location_scope', 'india_in_office_internship', this, 'scope-tabs')">🏢 India In-Office Interns</button>
         <button class="pill" data-val="india" onclick="setFilter('location_scope', 'india', this, 'scope-tabs')">India</button>
         <button class="pill" data-val="global" onclick="setFilter('location_scope', 'global', this, 'scope-tabs')">Global (Ex-India)</button>
         <button class="pill" data-val="remote" onclick="setFilter('location_scope', 'remote', this, 'scope-tabs')">Remote / WFH</button>
