@@ -571,14 +571,20 @@ async function loadStats() {
     const res = await fetch("/api/stats");
     const s = await res.json();
 
-    document.getElementById("kpi-total").textContent = (s.total || 0).toLocaleString();
-    document.getElementById("kpi-target").textContent = (s.target_count || 0).toLocaleString();
-    document.getElementById("kpi-india").textContent = (s.india_count || 0).toLocaleString();
-    document.getElementById("kpi-globe").textContent = (s.global_remote_intern_count || 0).toLocaleString();
-    const inOfficeElem = document.getElementById("kpi-in-office-india");
-    if (inOfficeElem) inOfficeElem.textContent = (s.in_office_india_internships || 0).toLocaleString();
-    document.getElementById("kpi-remote").textContent = `${s.remote_pct || 0}%`;
-    document.getElementById("kpi-applied").textContent = (s.applied_count || 0).toLocaleString();
+    const setVal = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = val;
+    };
+
+    setVal("kpi-total", (s.total || 0).toLocaleString());
+    setVal("kpi-target", (s.target_count || 0).toLocaleString());
+    setVal("kpi-internships", (s.internships || 0).toLocaleString());
+    setVal("kpi-freshers", (s.freshers_count || 0).toLocaleString());
+    setVal("kpi-india", (s.india_count || 0).toLocaleString());
+    setVal("kpi-globe", (s.global_count || s.global_remote_intern_count || 0).toLocaleString());
+    setVal("kpi-in-office-india", (s.in_office_india_internships || 0).toLocaleString());
+    setVal("kpi-remote", `${s.remote_pct || 0}%`);
+    setVal("kpi-applied", (s.applied_count || 0).toLocaleString());
 
     renderCharts(s);
   } catch(e) { console.error("Stats load error:", e); }
@@ -832,10 +838,10 @@ async function showAppliedJobs() {
     const data = await res.json();
     const items = data.items || [];
     if (!items.length) {
-      list.innerHTML = '<div class="empty-state">
+      list.innerHTML = `<div class="empty-state">
         <div class="empty-icon"><svg class="icon-svg-lg" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></div>
         <h3>No applications yet</h3><p>Mark jobs as Applied to track them here.</p>
-      </div>';
+      </div>`;
       return;
     }
     list.innerHTML = items.map(j => {
@@ -851,10 +857,10 @@ async function showAppliedJobs() {
       </div>`;
     }).join("");
   } catch(e) {
-    list.innerHTML = '<div class="empty-state">
+    list.innerHTML = `<div class="empty-state">
       <div class="empty-icon"><svg class="icon-svg-lg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg></div>
       <h3>Error loading applications</h3>
-    </div>';
+    </div>`;
   }
 }
 function hideAppliedJobs() {

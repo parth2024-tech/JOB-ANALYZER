@@ -506,10 +506,15 @@ body {
 
 /* Action pill buttons in header */
 .action-pill-btn {
+  width: auto !important;
+  height: 36px;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
   font-size: 0.82rem;
   font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 20px;
+  padding: 0 12px;
+  border-radius: 8px;
   background: rgba(0, 255, 157, 0.08);
   border: 1px solid rgba(0, 255, 157, 0.25);
   color: var(--accent-green, #00ff9d);
