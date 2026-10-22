@@ -205,36 +205,36 @@ class TestScraperEngine:
                 "jobs": [
                     {
                         "id": 201,
-                        "title": "Senior Full-Stack Engineer",
+                        "title": "Cloud Security Engineer",
                         "company_name": "Askable Tech",
                         "candidate_required_location": "Worldwide",
                         "url": "https://remotive.com/jobs/201",
-                        "tags": ["Python", "React", "TypeScript", "PostgreSQL"],
-                        "description": "<p>Build cloud systems. Apply at https://boards.greenhouse.io/askable/jobs/201</p>",
+                        "tags": ["Cloud Security", "AWS", "IAM", "PostgreSQL"],
+                        "description": "<p>Build cloud security infrastructure. Apply at https://boards.greenhouse.io/askable/jobs/201</p>",
                         "company_logo": "https://remotive.com/logo201.png",
                         "salary": "$120,000 - $140,000",
                         "publication_date": f"{today}T12:00:00Z",
                     },
                     {
                         "id": 202,
-                        "title": "Technical Support Engineer",
+                        "title": "Cyber Security Analyst",
                         "company_name": "SupportDesk Global",
                         "candidate_required_location": "Worldwide",
                         "url": "https://remotive.com/jobs/202",
-                        "tags": ["Customer Support", "API", "Zendesk", "Troubleshooting"],
-                        "description": "<p>Resolve technical issues for enterprise developers.</p>",
+                        "tags": ["Cybersecurity", "SIEM", "SOC", "Troubleshooting"],
+                        "description": "<p>Resolve security issues for enterprise developers.</p>",
                         "company_logo": "https://remotive.com/logo202.png",
                         "salary": "$60,000 - $80,000",
                         "publication_date": f"{today}T12:00:00Z",
                     },
                     {
                         "id": 203,
-                        "title": "Lead Product Designer",
+                        "title": "Application Security Engineer",
                         "company_name": "DesignCraft AI",
                         "candidate_required_location": "Worldwide",
                         "url": "https://remotive.com/jobs/203",
-                        "tags": ["Figma", "UI/UX", "Design Systems"],
-                        "description": "<p>Lead our UI/UX design. <a href='https://jobs.lever.co/designcraft/203'>Apply on Lever</a></p>",
+                        "tags": ["AppSec", "Vulnerability", "DevSecOps"],
+                        "description": "<p>Lead our AppSec code audits. <a href='https://jobs.lever.co/designcraft/203'>Apply on Lever</a></p>",
                         "company_logo": "https://remotive.com/logo203.png",
                         "salary": "$130,000",
                         "publication_date": f"{today}T12:00:00Z",
@@ -254,14 +254,15 @@ class TestScraperEngine:
                 assert "greenhouse.io" in dev_res["items"][0]["apply_url"]
                 assert dev_res["items"][0]["salary_display"] == "$120,000 - $140,000"
 
-                # Verify Support role
+                # Verify Security Analyst role
                 sup_res = temp_db.get_jobs_filtered(search="SupportDesk Global")
                 assert sup_res["total"] == 1
-                assert sup_res["items"][0]["title"] == "Technical Support Engineer"
+                assert sup_res["items"][0]["title"] == "Cyber Security Analyst"
 
-                # Verify Design role with Lever ATS
+                # Verify AppSec role with Lever ATS
                 des_res = temp_db.get_jobs_filtered(search="DesignCraft AI")
                 assert des_res["total"] == 1
+                assert des_res["items"][0]["title"] == "Application Security Engineer"
                 assert des_res["items"][0]["ats_provider"] == "Lever"
                 assert "lever.co" in des_res["items"][0]["apply_url"]
 

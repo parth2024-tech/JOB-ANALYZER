@@ -573,22 +573,8 @@ def is_strictly_cyber_job(title: str, description: str = "") -> bool:
 
 
 def is_tech_or_cyber_job(title: str, description: str = "") -> bool:
-    if not title:
-        return False
-    t = title.lower().strip()
-    for exc in PHYSICAL_SECURITY_EXCLUSIONS:
-        if re.search(exc, t):
-            return False
-    for exc in NON_CYBER_TITLE_EXCLUSIONS:
-        if re.search(exc, t):
-            return False
-    for p in CYBER_TITLE_PATTERNS:
-        if re.search(p, t):
-            return True
-    for p in TECH_TITLE_PATTERNS:
-        if re.search(p, t):
-            return True
-    return False
+    """Strictly gate on cybersecurity roles only."""
+    return is_strictly_cyber_job(title, description)
 
 
 _STIPEND_RANGE_RE = re.compile(
@@ -1112,7 +1098,7 @@ class JobDatabase:
 
             data["is_india"] = is_ind
             data["is_target_match"] = is_tgt
-            data["target_badge"] = "🇮🇳 India • Fresher / Intern" if is_ind else "🌐 Global • Fresher / Intern"
+            data["target_badge"] = "🇮🇳 India • In-Office Intern" if data.get("is_in_office_india") and jt == "internship" else ("🇮🇳 India • Cybersecurity" if is_ind else "🌐 Global • Cybersecurity")
             data["application_routes"] = generate_application_routes(tit, comp, data.get("apply_url"))
             data["apply_url"] = data["application_routes"]["direct_url"]
             data["freshness_bucket"] = compute_freshness_bucket(data.get("posted_date"), data.get("discovered_at"))
@@ -1543,7 +1529,7 @@ class JobDatabase:
                 item["is_target_match"] = is_tgt
                 item["is_subscribed_match"] = matched_sub is not None
                 item["matched_subscription"] = matched_sub
-                item["target_badge"] = "🇮🇳 India • In-Office Intern" if item["is_in_office_india"] and jt == "internship" else ("🇮🇳 India • Tech / Cyber" if is_ind else "🌐 Global • Tech / Cyber")
+                item["target_badge"] = "🇮🇳 India • In-Office Intern" if item["is_in_office_india"] and jt == "internship" else ("🇮🇳 India • Cybersecurity" if is_ind else "🌐 Global • Cybersecurity")
                 item["application_routes"] = generate_application_routes(tit, comp, item.get("apply_url"))
                 item["apply_url"] = item["application_routes"]["direct_url"]
                 item["applied"] = item["id"] in applied_ids
@@ -1829,7 +1815,7 @@ class JobDatabase:
                 jt = (r["job_type"] or "").lower()
                 is_intern = (jt == "internship") or ("intern" in tit.lower())
 
-                if not is_tech_or_cyber_job(tit, desc):
+                if not is_strictly_cyber_job(tit, desc):
                     to_delete.append(r["id"])
                     continue
                 if is_intern and not is_fresher_or_intern(tit, desc, jt):

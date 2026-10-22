@@ -419,12 +419,16 @@ class TestWellfoundAndInternshalaExtensions:
     def test_is_tech_or_cyber_job(self):
         from database import is_tech_or_cyber_job
 
-        assert is_tech_or_cyber_job("Software Engineer Intern", "Python, React") is True
-        assert is_tech_or_cyber_job("Backend Developer", "Golang, Docker, AWS") is True
+        # Cybersecurity roles should be accepted
         assert is_tech_or_cyber_job("Security Analyst", "SIEM, SOC, Splunk") is True
-        assert is_tech_or_cyber_job("Full Stack Engineer", "Node.js, Postgres") is True
+        assert is_tech_or_cyber_job("Cybersecurity Intern", "Vulnerability management") is True
+        assert is_tech_or_cyber_job("Penetration Tester", "Ethical hacking, Burp Suite") is True
+        assert is_tech_or_cyber_job("Cloud Security Engineer", "AWS, Terraform, IAM") is True
 
-        # Non-tech roles should be rejected
+        # Non-cyber roles should be strictly rejected
+        assert is_tech_or_cyber_job("Software Engineer Intern", "Python, React") is False
+        assert is_tech_or_cyber_job("Backend Developer", "Golang, Docker, AWS") is False
+        assert is_tech_or_cyber_job("Full Stack Engineer", "Node.js, Postgres") is False
         assert is_tech_or_cyber_job("English Teacher", "Spoken English training") is False
         assert is_tech_or_cyber_job("Nurse / Clinical Care", "Patient assistance") is False
         assert is_tech_or_cyber_job("Accountant", "Tally, GST tax filing") is False
@@ -435,18 +439,18 @@ class TestWellfoundAndInternshalaExtensions:
 
         today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
-        # 1. In-Office India Intern
+        # 1. In-Office India Intern (Cybersecurity)
         job1 = JobEntry(
             id="test-in-office-1",
             source="Internshala Bangalore In-Office Internships",
             source_url="https://internshala.com",
-            title="Python Developer Intern",
+            title="Cybersecurity Analyst Intern",
             company="DataCraft Labs",
             location="Bangalore",
             remote=False,
             job_type="internship",
             domain_tags=[],
-            description="Build APIs with FastAPI",
+            description="Build security monitoring APIs with FastAPI",
             apply_url="https://internshala.com/internship/1",
             posted_date=today_iso,
             is_in_office_india=True,
@@ -455,18 +459,18 @@ class TestWellfoundAndInternshalaExtensions:
         )
         assert temp_db.insert_job(job1, []) is True
 
-        # 2. Remote Global Job
+        # 2. Remote Global Job (Cybersecurity)
         job2 = JobEntry(
             id="test-remote-global-1",
-            source="Wellfound Global Software Engineer",
+            source="Wellfound Global Security Engineer",
             source_url="https://wellfound.com",
-            title="Junior Software Engineer",
+            title="Junior Security Engineer",
             company="NovaScale",
             location="Remote",
             remote=True,
             job_type="full-time",
             domain_tags=[],
-            description="Distributed systems engineering",
+            description="Distributed security engineering",
             apply_url="https://wellfound.com/jobs/2",
             posted_date=today_iso,
             is_in_office_india=False,

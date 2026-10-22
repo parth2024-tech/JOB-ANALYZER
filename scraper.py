@@ -16,7 +16,6 @@ from database import (
     JobDatabase,
     JobEntry,
     is_strictly_cyber_job,
-    is_tech_or_cyber_job,
     extract_stipend_inr,
     is_in_office_india_opportunity,
 )
@@ -241,6 +240,9 @@ class ScraperEngine:
                 else:
                     company = "Unknown"
 
+            if not is_strictly_cyber_job(title, description):
+                return None
+
             location = entry.get("location", "Remote")
             remote = "remote" in location.lower() or "anywhere" in location.lower()
             posted = entry.get("published", entry.get("updated", ""))
@@ -344,6 +346,9 @@ class ScraperEngine:
                     break
 
             if not title or not company:
+                return None
+
+            if not is_strictly_cyber_job(title, description):
                 return None
 
             return JobEntry(
@@ -455,6 +460,8 @@ class ScraperEngine:
                         posted_date = re.sub(r"<[^>]+>", "", posted_date).strip()
 
                     if title and company and url:
+                        if not is_strictly_cyber_job(title):
+                            return None
                         is_intern = "intern" in src.name.lower() or "intern" in title.lower()
                         return JobEntry(
                             id=f"github_{src.name}_{hash(title+company+location)}",
@@ -498,6 +505,9 @@ class ScraperEngine:
             location = parts[1] if len(parts) > 1 else "Remote"
 
             if url.startswith("#") or "github.com/SimplifyJobs/New-Grad-Positions" in url:
+                return None
+
+            if not is_strictly_cyber_job(title):
                 return None
 
             is_intern = "intern" in src.name.lower() or "intern" in title.lower()
@@ -598,6 +608,9 @@ class ScraperEngine:
             posted = job_data.get("created_at", job_data.get("updated_at", job_data.get("date",
                      job_data.get("pubDate",
                      job_data.get("MatchedObjectDescriptor", {}).get("PublicationStartDate", "")))))
+
+            if not is_strictly_cyber_job(str(title), str(description)):
+                return None
 
             return JobEntry(
                 id=f"json_{src.name}_{hash(str(job_data.get('id', str(title)+str(company))))}",
@@ -720,6 +733,8 @@ class ScraperEngine:
         """Parse a Lever API posting into a JobEntry."""
         try:
             title = posting.get("text", "").strip()
+            if not is_strictly_cyber_job(title):
+                return None
             cats = posting.get("categories", {})
             location = cats.get("location", "Remote") or "Remote"
             job_type_raw = cats.get("commitment", "full-time") or "full-time"
@@ -1486,7 +1501,7 @@ class ScraperEngine:
             company = j.get("company_name", "Unknown")
             full_text = f"{title} {tags_str} {desc}"
 
-            if not is_tech_or_cyber_job(title, full_text):
+            if not is_strictly_cyber_job(title, full_text):
                 continue
 
             total += 1
@@ -1680,6 +1695,10 @@ class ScraperEngine:
                 continue
             apply_url = f"https://internshala.com{href}" if href.startswith("/") else href
 
+            card_text = c.get_text(separator=" ", strip=True)
+            if not is_strictly_cyber_job(title, card_text):
+                continue
+
             internship_id = c.get("internshipid") or abs(hash(apply_url))
 
             stipend_raw = stipend_elem.get_text(strip=True) if stipend_elem else ""
@@ -1689,7 +1708,6 @@ class ScraperEngine:
             remote = is_wfh
             is_in_office = is_in_office_india_opportunity(loc, remote)
 
-            card_text = c.get_text(separator=" ", strip=True)
             posted_date = today_str
             days_match = re.search(r"(\d+)\s+day[s]?\s+ago", card_text, re.IGNORECASE)
             week_match = re.search(r"(\d+)\s+week[s]?\s+ago", card_text, re.IGNORECASE)
@@ -1821,6 +1839,9 @@ class ScraperEngine:
 
             comp = r.get("compensation", "") or ""
             desc = (r.get("description", "") or startup_info.get("concept", ""))[:4000]
+
+            if not is_strictly_cyber_job(title, f"{title} {desc}"):
+                continue
 
             ats_source = r.get("atsSource", "") or ""
             ats_clean = ""
