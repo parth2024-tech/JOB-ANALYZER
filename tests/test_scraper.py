@@ -190,6 +190,82 @@ class TestScraperEngine:
                 assert new_jobs == 1
 
     @pytest.mark.asyncio
+    async def test_scrape_remotive_multi_category(self, temp_db):
+        """Test Remotive scraper parsing for Programming, Support, and Design roles with ATS extraction."""
+        import json
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        async with ScraperEngine("/home/thor/Desktop/linkedin/config.yaml", temp_db) as scraper:
+            src = SourceConfig(
+                name="Remotive Multi Test",
+                url="https://remotive.com/api/remote-jobs",
+                type="remotive",
+            )
+            sample_data = {
+                "jobs": [
+                    {
+                        "id": 201,
+                        "title": "Senior Full-Stack Engineer",
+                        "company_name": "Askable Tech",
+                        "candidate_required_location": "Worldwide",
+                        "url": "https://remotive.com/jobs/201",
+                        "tags": ["Python", "React", "TypeScript", "PostgreSQL"],
+                        "description": "<p>Build cloud systems. Apply at https://boards.greenhouse.io/askable/jobs/201</p>",
+                        "company_logo": "https://remotive.com/logo201.png",
+                        "salary": "$120,000 - $140,000",
+                        "publication_date": f"{today}T12:00:00Z",
+                    },
+                    {
+                        "id": 202,
+                        "title": "Technical Support Engineer",
+                        "company_name": "SupportDesk Global",
+                        "candidate_required_location": "Worldwide",
+                        "url": "https://remotive.com/jobs/202",
+                        "tags": ["Customer Support", "API", "Zendesk", "Troubleshooting"],
+                        "description": "<p>Resolve technical issues for enterprise developers.</p>",
+                        "company_logo": "https://remotive.com/logo202.png",
+                        "salary": "$60,000 - $80,000",
+                        "publication_date": f"{today}T12:00:00Z",
+                    },
+                    {
+                        "id": 203,
+                        "title": "Lead Product Designer",
+                        "company_name": "DesignCraft AI",
+                        "candidate_required_location": "Worldwide",
+                        "url": "https://remotive.com/jobs/203",
+                        "tags": ["Figma", "UI/UX", "Design Systems"],
+                        "description": "<p>Lead our UI/UX design. <a href='https://jobs.lever.co/designcraft/203'>Apply on Lever</a></p>",
+                        "company_logo": "https://remotive.com/logo203.png",
+                        "salary": "$130,000",
+                        "publication_date": f"{today}T12:00:00Z",
+                    }
+                ]
+            }
+            with patch.object(scraper, "fetch", new_callable=AsyncMock) as mock_fetch:
+                mock_fetch.return_value = json.dumps(sample_data)
+                new_jobs, total = await scraper.scrape_remotive(src)
+                assert total == 3
+                assert new_jobs == 3
+
+                # Verify ATS extraction for Greenhouse
+                dev_res = temp_db.get_jobs_filtered(search="Askable Tech")
+                assert dev_res["total"] == 1
+                assert dev_res["items"][0]["ats_provider"] == "Greenhouse"
+                assert "greenhouse.io" in dev_res["items"][0]["apply_url"]
+                assert dev_res["items"][0]["salary_display"] == "$120,000 - $140,000"
+
+                # Verify Support role
+                sup_res = temp_db.get_jobs_filtered(search="SupportDesk Global")
+                assert sup_res["total"] == 1
+                assert sup_res["items"][0]["title"] == "Technical Support Engineer"
+
+                # Verify Design role with Lever ATS
+                des_res = temp_db.get_jobs_filtered(search="DesignCraft AI")
+                assert des_res["total"] == 1
+                assert des_res["items"][0]["ats_provider"] == "Lever"
+                assert "lever.co" in des_res["items"][0]["apply_url"]
+
+    @pytest.mark.asyncio
     async def test_scrape_internshala_ajax(self, temp_db):
         """Test Internshala AJAX scraper parsing."""
         import json

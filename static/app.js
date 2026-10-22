@@ -477,6 +477,7 @@ function renderJobCards(jobs) {
         ${j.is_in_office_india ? '<span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4);" title="Verified In-Office Opportunity in India">🏢 In-Office India</span>' : ''}
         ${j.stipend_inr_monthly ? `<span class="badge" style="background: rgba(245, 158, 11, 0.2); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.4);" title="Monthly Internship Stipend">₹${Math.round(j.stipend_inr_monthly).toLocaleString('en-IN')}/mo</span>` : ''}
         ${j.ats_provider ? `<span class="badge" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.4);" title="Direct ATS Application Portal">${escapeHtml(j.ats_provider)}</span>` : ''}
+        ${j.source && j.source.includes("Remotive") ? '<span class="badge" style="background: rgba(14, 165, 233, 0.2); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.4);" title="Verified Remotive Remote Role">Remotive</span>' : ''}
         <span class="badge badge-type">${j.job_type === 'internship' ? 'Internship' : 'Job'}</span>
         <span class="badge ${scoreBadge}" title="Resume match based on your skills profile">${match.score}% Match</span>
         <span class="badge badge-seniority-${seniority}">${seniorityLabel}</span>

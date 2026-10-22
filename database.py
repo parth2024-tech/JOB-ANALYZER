@@ -315,14 +315,17 @@ CYBER_TITLE_PATTERNS = [
 ]
 
 TECH_TITLE_PATTERNS = [
-    r'\b(software|developer|engineer|programmer|coder|swe|sde)\b',
+    r'\b(software|developer|engineer|programmer|coder|swe|sde|programming)\b',
     r'\b(frontend|front[\s-]end|backend|back[\s-]end|fullstack|full[\s-]stack|development)\b',
     r'\b(web\s*development|web\s*developer|mobile\s*developer|ios|android|app\s*development)\b',
-    r'\b(python|golang|rust|java|c\+\+|react|node|typescript|javascript|django|flask|spring)\b',
+    r'\b(python|golang|rust|java|c\+\+|react|node|typescript|javascript|django|flask|spring|ruby|rails)\b',
     r'\b(devops|sre|site reliability|cloud|platform engineer|infrastructure|sysadmin|system admin)\b',
-    r'\b(data engineer|data scientist|machine learning|ai engineer|nlp|computer vision|ai|ml)\b',
+    r'\b(data engineer|data scientist|machine learning|ai engineer|nlp|computer vision|ai|ml|data analyst)\b',
     r'\b(qa|qa\s*engineer|testing|tester|test\s*engineer|automation engineer|sdet)\b',
     r'\b(computer science|information technology|cs intern|it intern|database|dba)\b',
+    r'\b(designer|ui[\s/-]?ux|product designer|web designer|graphic designer|interaction designer)\b',
+    r'\b(support|technical support|customer support|service desk|it support|helpdesk|customer success)\b',
+    r'\b(product manager|technical product manager|scrum master|technical writer)\b',
 ]
 
 PHYSICAL_SECURITY_EXCLUSIONS = [
@@ -332,14 +335,13 @@ PHYSICAL_SECURITY_EXCLUSIONS = [
 
 NON_CYBER_TITLE_EXCLUSIONS = [
     r'\b(accountant|accounting|buchhalt\w*)\b',
-    r'\b(social media|content creator|copywriter)\b',
+    r'\b(social media|copywriter)\b',
     r'\b(sales manager|account executive|vertrieb|sales rep\w*)\b',
-    r'\b(marketing|seo|growth marketer)\b',
+    r'\b(marketing manager|seo specialist|growth marketer)\b',
     r'\b(recruiter|recruiting|talent acquisition|personalberat\w*)\b',
     r'\b(nurse|physio|arzt|krankenpflege|bauphysi\w*)\b',
     r'\b(civil engineer|mechanical engineer|maschinenbau|bauleiter)\b',
     r'\b(real estate|immobilien)\b',
-    r'\b(graphic designer|product designer)\b',
     r'\b(warehouse|driver|koch|gastronomie|hotel)\b'
 ]
 
@@ -1447,6 +1449,8 @@ class JobDatabase:
                 conditions.append("source LIKE '%Wellfound%'")
             elif s_clean.lower() == "linkedin":
                 conditions.append("source LIKE '%LinkedIn%'")
+            elif s_clean.lower() == "remotive":
+                conditions.append("source LIKE '%Remotive%'")
             else:
                 conditions.append("source = ?")
                 params.append(s_clean)

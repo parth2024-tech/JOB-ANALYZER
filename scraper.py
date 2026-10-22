@@ -16,6 +16,7 @@ from database import (
     JobDatabase,
     JobEntry,
     is_strictly_cyber_job,
+    is_tech_or_cyber_job,
     extract_stipend_inr,
     is_in_office_india_opportunity,
 )
@@ -1459,7 +1460,7 @@ class ScraperEngine:
     # ============ Remotive Scraper ============
     async def scrape_remotive(self, src: SourceConfig) -> tuple[int, int]:
         """
-        Scrape Remotive free public API (remote jobs).
+        Scrape Remotive free public API (remote jobs in programming, support, design, and more).
         Endpoint: https://remotive.com/api/remote-jobs
         """
         print(f"[Remotive] Fetching {src.name}...")
@@ -1479,25 +1480,61 @@ class ScraperEngine:
 
         for j in jobs_list:
             title = j.get("title", "")
-            tags = " ".join(j.get("tags", []))
-            desc = j.get("description", "")
+            raw_tags = j.get("tags", []) or []
+            tags_str = " ".join(raw_tags)
+            desc = j.get("description", "") or ""
             company = j.get("company_name", "Unknown")
-            full_text = f"{title} {tags} {desc}"
+            full_text = f"{title} {tags_str} {desc}"
 
-            if not is_strictly_cyber_job(title, full_text):
+            if not is_tech_or_cyber_job(title, full_text):
                 continue
 
             total += 1
-            apply_url = j.get("url", "")
-            if not apply_url:
+            fallback_url = j.get("url", "")
+            if not fallback_url:
                 continue
 
-            location = j.get("candidate_required_location") or "Remote"
+            location = j.get("candidate_required_location") or "Worldwide (Remote)"
             logo_url = j.get("company_logo", "") or ""
-            posted_date = j.get("publication_date", "")
+            pub_date = j.get("publication_date", "")
+            posted_date = pub_date.split("T")[0] if "T" in pub_date else pub_date
 
             soup = BeautifulSoup(desc[:5000], "html.parser")
             clean_desc = soup.get_text()
+
+            # High-performance ATS & direct link extractor
+            direct_apply_url = None
+            ats_provider = ""
+            for a in soup.find_all("a", href=True):
+                href = a["href"]
+                if "remotive.com" not in href and (href.startswith("http://") or href.startswith("https://")):
+                    h_low = href.lower()
+                    if any(ats in h_low for ats in ["greenhouse.io", "lever.co", "ashbyhq.com", "workable.com", "smartrecruiters.com", "bamboohr.com"]):
+                        direct_apply_url = href
+                        break
+                    elif not direct_apply_url and any(w in a.get_text().lower() for w in ["apply", "careers", "job", "position"]):
+                        direct_apply_url = href
+
+            if not direct_apply_url:
+                m_apply = re.search(r'Apply\s+(?:at|here|via|to)?\s*:?\s*(https?://[^\s<\"\'\)\]]+)', desc, re.IGNORECASE)
+                if m_apply:
+                    direct_apply_url = m_apply.group(1)
+
+            if direct_apply_url:
+                h_low = direct_apply_url.lower()
+                if "greenhouse" in h_low: ats_provider = "Greenhouse"
+                elif "lever" in h_low: ats_provider = "Lever"
+                elif "ashby" in h_low: ats_provider = "Ashby"
+                elif "workable" in h_low: ats_provider = "Workable"
+                elif "smartrecruiters" in h_low: ats_provider = "SmartRecruiters"
+                elif "bamboohr" in h_low: ats_provider = "BambooHR"
+
+            apply_url = direct_apply_url or fallback_url
+            raw_salary = (j.get("salary") or "").strip()
+
+            skills_json = json.dumps(raw_tags[:8]) if raw_tags else "[]"
+            job_type_raw = (j.get("job_type") or "full-time").lower()
+            job_type = "internship" if "intern" in title.lower() or "intern" in job_type_raw else ("contract" if "contract" in job_type_raw else "full-time")
 
             job = JobEntry(
                 id=f"remotive_{j.get('id', abs(hash(apply_url)))}",
@@ -1507,18 +1544,23 @@ class ScraperEngine:
                 company=company,
                 location=location,
                 remote=True,
-                job_type="internship" if "intern" in title.lower() else "full-time",
+                job_type=job_type,
                 domain_tags=[],
                 description=clean_desc,
                 apply_url=apply_url,
                 posted_date=posted_date,
                 logo_url=logo_url,
-                min_exp_years=0.0 if "intern" in title.lower() else None
+                salary_display=raw_salary,
+                min_exp_years=0.0 if job_type == "internship" else None,
+                is_in_office_india=False,
+                credibility_score=1.15,
+                ats_provider=ats_provider,
+                skills_required=skills_json
             )
             if self.db.insert_job(job, self.keywords):
                 count += 1
 
-        print(f"[Remotive] {src.name}: {count}/{total} new cyber jobs")
+        print(f"[Remotive] {src.name}: {count}/{total} new jobs inserted")
         return count, total
 
     # ============ RemoteOK Scraper ============
